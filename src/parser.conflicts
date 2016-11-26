@@ -1,10 +1,10 @@
 
-** Conflict (shift/reduce) in state 150.
+** Conflict (shift/reduce) in state 151.
 ** Tokens involved: WHILE TRUE SUB RETURN NULL NOT NEW LPAR INT IF IDENT FOR FALSE CHARVAL CHAR BEGIN
 ** The following explanations concentrate on token WHILE.
 ** This state is reached from file after reading:
 
-WITH STDLIB SEMICOLON USE STDLIB SEMICOLON PROCEDURE IDENT IS list(decl) BEGIN IF expr THEN stmt 
+WITH STDLIB SEMICOLON USE STDLIB SEMICOLON PROCEDURE IDENT IS list(decl) BEGIN IF expr THEN nonempty_list(stmt) ELSE stmt 
 
 ** The derivations that appear below have the following common factor:
 ** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
@@ -13,19 +13,21 @@ file
 WITH STDLIB SEMICOLON USE STDLIB SEMICOLON PROCEDURE IDENT IS list(decl) BEGIN nonempty_list(stmt) END option(IDENT) SEMICOLON EOF 
                                                                                (?)
 
-** In state 150, looking ahead at WHILE, reducing production
+** In state 151, looking ahead at WHILE, reducing production
 ** nonempty_list(stmt) -> stmt 
 ** is permitted because of the following sub-derivation:
 
 stmt nonempty_list(stmt) // lookahead token appears because nonempty_list(stmt) can begin with WHILE
-IF expr THEN nonempty_list(stmt) // lookahead token is inherited
-             stmt . 
+IF expr THEN nonempty_list(stmt) condition // lookahead token is inherited
+                                 ELSE nonempty_list(stmt) // lookahead token is inherited
+                                      stmt . 
 
-** In state 150, looking ahead at WHILE, shifting is permitted
+** In state 151, looking ahead at WHILE, shifting is permitted
 ** because of the following sub-derivation:
 
 stmt 
-IF expr THEN nonempty_list(stmt) 
-             stmt nonempty_list(stmt) 
-                  stmt 
-                  . WHILE expr LOOP nonempty_list(stmt) END LOOP SEMICOLON 
+IF expr THEN nonempty_list(stmt) condition 
+                                 ELSE nonempty_list(stmt) 
+                                      stmt nonempty_list(stmt) 
+                                           stmt 
+                                           . WHILE expr LOOP nonempty_list(stmt) END LOOP SEMICOLON 

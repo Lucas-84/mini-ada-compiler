@@ -4,7 +4,7 @@
   open Ast
 
   let check_same_identifiers i1 o2 = match o2 with
-    | Some i2 when String.lowercase_ascii i1 <> String.lowercase_ascii i2 -> failwith "Two different identifiers"
+    | Some i2 when String.lowercase_ascii i1 <> String.lowercase_ascii i2 -> failwith ("Two different identifiers")
     | _ -> ()
 %}
 
@@ -29,7 +29,7 @@
 
 /* Token precedence */
 
-%nonassoc IF
+//%nonassoc IF
 %left OR
 %left AND
 %nonassoc NOT
@@ -56,7 +56,6 @@ file:
   SEMICOLON; EOF
   { 
     check_same_identifiers i1 o2;
-    (*Printf.printf "matched %s\n" i1;*)
     { procedure = i1; glob_decl = d; stmts = s }
   }
 ;
@@ -95,21 +94,21 @@ stmt:
   { Sreturn e }
 | BEGIN; s = stmt+; END; SEMICOLON
   { Sblock s }
-// TODO : IF
-/*
-| IF; e1 = expr; THEN; s = stmt+; END; IF; SEMICOLON 
-  { Sif ([e1, s], []) }
-| IF; e1 = expr; THEN; s1 = stmt+; ELSE; s2 = stmt+; END; IF; SEMICOLON
-  { Sif ([e1, s1], s2) }
-| IF; e1 = expr; THEN; s1 = stmt+; (ELSIF; expr; THEN; stmt+)*; 
-*/
-| IF | ELSIF 
-  { assert false }
+| IF; e = expr; THEN; s = stmt+; c = condition 
+  { let (l1, l2) = match c with Sif (a, b) -> (a, b) | _ -> assert false in Sif ((e, s) :: l1, l2) }
 | FOR; i = IDENT; IN; r = REVERSE?; e1 = expr; DOUBLEDOT; e2 = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
   { Sfor (i, (match r with Some _ -> true | _ -> false), e1, e2, s) }
 | WHILE; e = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
   { Swhile (e, s) }
 ;
+
+condition:
+| END; IF; SEMICOLON
+  { Sif ([], []) }
+| ELSE; s = stmt+; END; IF; SEMICOLON
+  { Sif ([], s) }
+| ELSIF; e = expr; THEN; s = stmt+; c = condition
+  { let (l1, l2) = match c with Sif (a, b) -> (a, b) | _ -> assert false in Sif ((e, s) :: l1, l2) }
 
 expr:
 | n = INT
