@@ -3,8 +3,8 @@ GENERATED = lexer.ml parser.ml parser.mli
 BIN=mini-ada
 FLAGS=
 
-all: $(BIN)
-	./$(BIN) a.adb 
+#all: $(BIN)
+#	./$(BIN) a.adb 
 
 .PHONY: tests
 
