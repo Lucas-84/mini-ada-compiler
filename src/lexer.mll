@@ -1,4 +1,5 @@
 (* Lexical analyzer for Mini-Ada *)
+(* Ocaml 4.0 *)
 
 {
   open Lexing
@@ -28,25 +29,38 @@
     let pos = lexbuf.lex_curr_p in
     lexbuf.lex_curr_p <-
       { pos with pos_lnum = pos.pos_lnum + 1; pos_bol = pos.pos_cnum }
+
+  let compare_case_space_insensitive s t =
+    let n = String.length s and m = String.length t in
+    let space = [' '; '\n'; '\t'] in
+    let rec do_from i j =
+      if i >= n && j >= m then true
+      else if i < n && List.mem s.[i] space then do_from (i + 1) j
+      else if j < m && List.mem t.[j] space then do_from i (j + 1)
+      else if (i < n && j >= m) || (i >= n && j < n) then false
+      else Char.lowercase_ascii s.[i] = Char.lowercase_ascii t.[j] && (do_from (i + 1) (j + 1))
+    in
+    do_from 0 0
 }
 
 let digit = ['0' - '9']
 let alpha = ['a'-'z' 'A'-'Z']
 let ident = alpha (alpha | digit | '_')*
-let charval = ['a'-'z' 'A'-'Z']* '\'' ['a'-'z' 'A'-'Z']*
-(* TODO : check 31 bits *)
+let space = [' ' '\n' '\t']
+let charval = alpha alpha+ space* '\'' space* alpha alpha+
 let integer = digit+
 let character = '\'' _ '\'' 
 let stdlib = "Ada.Text_IO"
 
 rule token = parse
 | ['\n']            { handle_newline lexbuf; token lexbuf }
-| [' ' '\t']+       { token lexbuf }
+| space+            { token lexbuf }
 | "--"              { comment lexbuf }
-| charval as s      { if String.lowercase_ascii s = "character'val" then CHARVAL else raise (Lexing_error "unknown token") }
+| charval as s      { if compare_case_space_insensitive s "character'val" then CHARVAL else raise (Lexing_error ("Invalid token" ^ s)) }
 | eof               { EOF } 
 | stdlib            { STDLIB } 
 | ident as s        { token_of_ident s }
+(* Dirty trick here *)
 | integer as s      { try let n = (int_of_string s) in if n > 1 lsl 31 then failwith ""; INT n with _ -> raise (Lexing_error ("too big integer constant " ^ s)); } 
 | character as s    { CHAR s.[1] } 
 | ":="              { COLONEQ }
