@@ -2,13 +2,19 @@
  * Abstract syntax tree of Mini Ada
  *)
 
-type file = {
+type loc = {
+  fp : Lexing.position;
+  lp : Lexing.position;
+}
+
+and file = {
   procedure : ident;
   glob_decl : decl list;
   stmts : stmt list;
 }
 
-and decl =
+and decl = decl_desc * loc
+and decl_desc =
   | Dtype of ident
   | Daccesstype of ident * ident 
   | Drecordtype of ident * field list
@@ -18,8 +24,8 @@ and decl =
 
 and field = ident list * stype
 and stype =
-  | Tident of ident
-  | Taccess of ident
+  | STident of ident
+  | STaccess of ident
 
 and params = param list
 and param = ident list * mode option * stype
@@ -27,7 +33,8 @@ and mode =
   | Min
   | Minout
 
-and stmt = 
+and stmt = stmt_desc * loc
+and stmt_desc = 
   | Saccess of access * expr
   | Sproccall of ident
   | Sfuncall of ident * expr list
@@ -58,7 +65,8 @@ and binop =
   | Bandthen
   | Borelse
 
-and expr =
+and expr = expr_desc * loc
+and expr_desc =
   | Eint of int
   | Echar of char
   | Ebool of bool
@@ -70,4 +78,4 @@ and expr =
   | Ecall of ident * expr list
   | Echarval of expr
 
-and ident = string 
+and ident = string

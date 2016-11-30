@@ -6,6 +6,8 @@
   let check_same_identifiers i1 o2 = match o2 with
     | Some i2 when String.lowercase_ascii i1 <> String.lowercase_ascii i2 -> failwith ("Two different identifiers")
     | _ -> ()
+
+  let dummy_loc = {fp = Lexing.dummy_pos; lp = Lexing.dummy_pos}
 %}
 
 /* Token declaration */
@@ -62,44 +64,44 @@ file:
 
 decl:
 | TYPE; i = IDENT; SEMICOLON
-  { Dtype i }
+  { Dtype i, {fp = $startpos; lp = $endpos} }
 | TYPE; i1 = IDENT; IS; ACCESS; i2 = IDENT; SEMICOLON
-  { Daccesstype (i1, i2) }
+  { Daccesstype (i1, i2), {fp = $startpos; lp = $endpos} }
 | TYPE; i = IDENT; IS; RECORD; f = field+; END; RECORD; SEMICOLON
-  { Drecordtype (i, f) }
+  { Drecordtype (i, f), {fp = $startpos; lp = $endpos} }
 | i = separated_nonempty_list(COMMA, IDENT); COLON; t = stype; SEMICOLON
-  { Dident (i, t, None) }
+  { Dident (i, t, None), {fp = $startpos; lp = $endpos} }
 | i = separated_nonempty_list(COMMA, IDENT); COLON; t = stype; COLONEQ; e = expr; SEMICOLON
-  { Dident (i, t, Some e) }
+  { Dident (i, t, Some e), {fp = $startpos; lp = $endpos} }
 | PROCEDURE; i1 = IDENT; p = params?; IS; d = decl*; BEGIN; s = stmt+; END; o2 = IDENT?; SEMICOLON
   {
     check_same_identifiers i1 o2; 
-    Dprocedure (i1, p, d, s)
+    Dprocedure (i1, p, d, s), {fp = $startpos; lp = $endpos}
   }
 | FUNCTION; i1 = IDENT; p = params?; RETURN; t = stype; IS; d = decl*; BEGIN; s = stmt+; END; o2 = IDENT?; SEMICOLON
   {
     check_same_identifiers i1 o2;
-    Dfunction (i1, p, t, d, s)
+    Dfunction (i1, p, t, d, s), {fp = $startpos; lp = $endpos}
   }
 ;
 
 stmt:
 | a = access; COLONEQ; e = expr; SEMICOLON
-  { Saccess (a, e) }
+  { Saccess (a, e), {fp = $startpos; lp = $endpos} }
 | i = IDENT; SEMICOLON
-  { Sproccall i }
+  { Sproccall i, {fp = $startpos; lp = $endpos} }
 | i = IDENT; LPAR; e = separated_nonempty_list(COMMA, expr); RPAR; SEMICOLON
-  { Sfuncall (i, e) }
+  { Sfuncall (i, e), {fp = $startpos; lp = $endpos} }
 | RETURN; e = expr?; SEMICOLON
-  { Sreturn e }
+  { Sreturn e, {fp = $startpos; lp = $endpos} }
 | BEGIN; s = stmt+; END; SEMICOLON
-  { Sblock s }
+  { Sblock s, {fp = $startpos; lp = $endpos} }
 | IF; e = expr; THEN; s = stmt+; c = condition 
-  { let (l1, l2) = match c with Sif (a, b) -> (a, b) | _ -> assert false in Sif ((e, s) :: l1, l2) }
+  { let (l1, l2) = match c with Sif (a, b) -> (a, b) | _ -> assert false in Sif ((e, s) :: l1, l2), {fp = $startpos; lp = $endpos} }
 | FOR; i = IDENT; IN; r = REVERSE?; e1 = expr; DOUBLEDOT; e2 = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
-  { Sfor (i, (match r with Some _ -> true | _ -> false), e1, e2, s) }
+  { Sfor (i, (match r with Some _ -> true | _ -> false), e1, e2, s), {fp = $startpos; lp = $endpos} }
 | WHILE; e = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
-  { Swhile (e, s) }
+  { Swhile (e, s), {fp = $startpos; lp = $endpos} }
 ;
 
 condition:
@@ -112,35 +114,35 @@ condition:
 
 expr:
 | n = INT
-  { Eint n }
+  { Eint n, {fp = $startpos; lp = $endpos} }
 | c = CHAR
-  { Echar c }
+  { Echar c, {fp = $startpos; lp = $endpos} }
 | TRUE
-  { Ebool true }
+  { Ebool true, {fp = $startpos; lp = $endpos} }
 | FALSE
-  { Ebool false }
+  { Ebool false, {fp = $startpos; lp = $endpos} }
 | NULL
-  { Enull }
+  { Enull, {fp = $startpos; lp = $endpos} }
 | LPAR; e = expr; RPAR
-  { e }
+  { fst e, {fp = $startpos; lp = $endpos} }
 | a = access
-  { Eaccess a }
+  { Eaccess a, {fp = $startpos; lp = $endpos} }
 | e1 = expr; AND; THEN; e2 = expr; %prec AND
-  { Ebinop (e1, Bandthen, e2) }
+  { Ebinop (e1, Bandthen, e2), {fp = $startpos; lp = $endpos} }
 | e1 = expr; OR; ELSE; e2 = expr; %prec OR
-  { Ebinop (e1, Borelse, e2) }
+  { Ebinop (e1, Borelse, e2), {fp = $startpos; lp = $endpos} }
 | e1 = expr; o = binop; e2 = expr
-  { Ebinop (e1, o, e2) }
+  { Ebinop (e1, o, e2), {fp = $startpos; lp = $endpos} }
 | NOT; e = expr
-  { Eneg e }
+  { Eneg e, {fp = $startpos; lp = $endpos} }
 | SUB; e = expr %prec minus
-  { Ebinop (Eint 0, Bsub, e) }
+  { Ebinop ((Eint 0, dummy_loc), Bsub, e), {fp = $startpos; lp = $endpos} }
 | NEW; i = IDENT
-  { Enew i }
+  { Enew i, {fp = $startpos; lp = $endpos} }
 | i = IDENT; LPAR; e = separated_nonempty_list(COMMA, expr); RPAR
-  { Ecall (i, e) }
+  { Ecall (i, e), {fp = $startpos; lp = $endpos} }
 | CHARVAL; LPAR; e = expr; RPAR
-  { Echarval e }
+  { Echarval e, {fp = $startpos; lp = $endpos} }
 
 %inline binop:
 | EQ        { Beq }
@@ -178,9 +180,9 @@ mode:
 
 stype:
 | i = IDENT
-  { Tident i }
+  { STident i }
 | ACCESS; i = IDENT 
-  { Taccess i }
+  { STaccess i }
 
 access:
 | i = IDENT

@@ -23,7 +23,7 @@
     try
       List.assoc (String.lowercase_ascii s) keywords
     with
-      Not_found -> IDENT s
+      Not_found -> IDENT (String.lowercase_ascii s)
 
   let handle_newline lexbuf =
     let pos = lexbuf.lex_curr_p in
@@ -50,7 +50,7 @@ let space = [' ' '\n' '\t']
 let charval = alpha alpha+ space* '\'' space* alpha alpha+
 let integer = digit+
 let character = '\'' _ '\'' 
-let stdlib = "Ada.Text_IO"
+let stdlib = "Ada.Text_IO" (* Handle spaces *)
 
 rule token = parse
 | ['\n']            { handle_newline lexbuf; token lexbuf }
