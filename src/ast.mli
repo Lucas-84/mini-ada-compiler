@@ -36,7 +36,7 @@ and stmt = stmt_desc * loc
 and stmt_desc = 
   | Saccess of access * expr
   | Sproccall of ident
-  | Sfuncall of ident * expr list
+  | Scall of ident * expr list
   | Sreturn of expr option
   | Sblock of stmt list
   | Sif of (expr * stmt list) list * stmt list

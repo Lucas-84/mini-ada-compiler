@@ -89,9 +89,9 @@ stmt:
 | a = access; COLONEQ; e = expr; SEMICOLON
   { Saccess (a, e), {fp = $startpos; lp = $endpos} }
 | i = IDENT; SEMICOLON
-  { Sproccall i, {fp = $startpos; lp = $endpos} }
+  { Scall (i, []), {fp = $startpos; lp = $endpos} }
 | i = IDENT; LPAR; e = separated_nonempty_list(COMMA, expr); RPAR; SEMICOLON
-  { Sfuncall (i, e), {fp = $startpos; lp = $endpos} }
+  { Scall (i, e), {fp = $startpos; lp = $endpos} }
 | RETURN; e = expr?; SEMICOLON
   { Sreturn e, {fp = $startpos; lp = $endpos} }
 | BEGIN; s = stmt+; END; SEMICOLON

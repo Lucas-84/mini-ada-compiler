@@ -1234,7 +1234,7 @@ and _menhir_goto_separated_nonempty_list_COMMA_expr_ : _menhir_env -> 'ttv_tail 
                 let _startpos = _startpos_i_ in
                 
 # 94 "parser.mly"
-  ( Sfuncall (i, e), {fp = _startpos; lp = _endpos} )
+  ( Scall (i, e), {fp = _startpos; lp = _endpos} )
 # 1239 "parser.ml"
                  in
                 _menhir_goto_stmt _menhir_env _menhir_stack _menhir_s _v) : 'freshtv636)) : 'freshtv638)
@@ -4495,7 +4495,7 @@ and _menhir_run135 : _menhir_env -> 'ttv_tail -> Lexing.position -> _menhir_stat
         let _startpos = _startpos_i_ in
         
 # 92 "parser.mly"
-  ( Sproccall i, {fp = _startpos; lp = _endpos} )
+  ( Scall (i, []), {fp = _startpos; lp = _endpos} )
 # 4500 "parser.ml"
          in
         _menhir_goto_stmt _menhir_env _menhir_stack _menhir_s _v) : 'freshtv314)) : 'freshtv316)

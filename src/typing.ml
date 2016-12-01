@@ -18,6 +18,7 @@ exception Unknown_member of ident * ident * loc
 exception Undeclared of ident * loc
 exception Undefined of ident * loc
 exception Wrong_argument_number of int * int * loc
+exception Not_record of typ * loc
 
 module Smap = Map.Make(String)
 module Sset = Set.Make(String)
@@ -72,19 +73,16 @@ let get_type env i iloc =
   with
     Not_found -> raise (Undeclared (i, iloc))
 
-let get_member_type env r i eloc = 
-  let rp = try
-    Smap.find r env.def_records
-  with Not_found -> raise (Undeclared (r, eloc))
-  in 
-  try
-    Smap.find i rp
-  with Not_found -> raise (Unknown_member (i, r, eloc)) 
-
 let get_member_list env r loc =
   try
     Smap.find r env.def_records
   with Not_found -> raise (Undefined (r, loc))
+
+let get_member_type env r i eloc = 
+  let rp = get_member_list env r eloc in
+  try
+    Smap.find i rp
+  with Not_found -> raise (Unknown_member (i, r, eloc)) 
 
 let type_of_name env i loc =
   try
@@ -166,7 +164,6 @@ let rec type_expr env (e0, e0loc) =
       raise (Wrong_argument_number (List.length el, List.length pl, e0loc)) in
     List.iter (fun ((_, t1), (_, t2)) -> check_types_equal t1 t2 e0loc) lc;
     (TEcall (i, el), rt)
-
 
 (* TODO : improve localization *)
 (* TODO : add return value of typed declaration *)
@@ -262,12 +259,35 @@ and type_stmt env (s, sloc) = match s with
     let (etree, etype) = type_expr env e in
     let t = get_type env i sloc in
     check_types_equal t etype sloc;
+  | Saccess (Arecord (e, i), e') ->
+    let (etree, etype) = type_expr env e in
+    let (etree', etype') = type_expr env e' in
+    let r = begin match etype with
+      | Trecord r -> r
+      | Taccess r -> r
+      | _ -> raise (Not_record (etype, sloc))
+    end in
+    let t = get_member_type env r i sloc in
+    check_types_equal t etype' sloc;
+  | Scall (i, el) ->
+    let el = List.map (type_expr env) el in
+    let pl = try
+      Smap.find i env.def_procedures
+    with Not_found ->
+      raise (Undeclared (i, sloc)) in
+    let lc = try
+      List.combine pl el
+    with Invalid_argument _ ->
+      raise (Wrong_argument_number (List.length el, List.length pl, sloc)) in
+    List.iter (fun ((_, t1), (_, t2)) -> check_types_equal t1 t2 sloc) lc;
+  | Sblock sl ->
+    type_stmt_list env sl
   | _ ->
     Format.eprintf "pas encore implemente\n@.";
     exit 2
 
-and type_stmt_list env dl =
-  List.iter (fun x -> type_stmt env x) dl
+and type_stmt_list env sl =
+  List.iter (fun x -> type_stmt env x) sl
 
 and type_file ast =
   let env = type_decl_list empty_env ast.glob_decl in

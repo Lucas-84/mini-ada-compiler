@@ -60,7 +60,11 @@ let () =
       exit 1
     | Wrong_argument_number (i1, i2, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\n%d arguments given whereas %d were expected\n@." i1 i2;
+      Format.eprintf "\t%d arguments given whereas %d were expected\n@." i1 i2;
+      exit 1
+    | Not_record (t, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\texpression has type %s but a record or an access type was expected\n@." (string_of_typ t);
       exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);
