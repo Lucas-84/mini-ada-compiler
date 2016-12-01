@@ -18,14 +18,17 @@ let report (b, e) =
 let () =
   Arg.parse ["--type-only", Arg.Unit (fun () -> type_only := true), "Type only";
              "--parse-only", Arg.Unit (fun () -> parse_only := true), "Parse only"] (fun s -> in_file := s) "Mini Ada compiler";
-  Printf.printf "Compiling file %s\n" !in_file;
+  (*Printf.printf "Compiling file %s\n" !in_file;*)
   let in_chan = open_in !in_file in
   let buf = Lexing.from_channel in_chan in
   try
     let ast = Parser.file Lexer.token buf in
     (*Printf.printf "Syntax checking completed\n";*)
-    let _ = type_file ast in
-    Printf.printf "Type checking completed\n";
+    if not !parse_only then begin
+      let _ = type_file ast in
+      ()
+      (*Printf.printf "Type checking completed\n";*)
+    end;
     close_in in_chan
   with 
     | Lexer.Lexing_error s ->

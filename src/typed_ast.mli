@@ -5,7 +5,7 @@
 open Ast
 
 type typ =
-  Tint | Tchar | Tbool | Trecord of ident | Taccess of ident | Tnull
+  Tint | Tchar | Tbool | Trecord of ident | Taccess of ident | Tnull | Tunit
 
 and texpr = texpr_desc * typ
 

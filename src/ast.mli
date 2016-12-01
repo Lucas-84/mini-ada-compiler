@@ -39,6 +39,7 @@ and stmt_desc =
   | Scall of ident * expr list
   | Sreturn of expr option
   | Sblock of stmt list
+  (* TODO : change this *)
   | Sif of (expr * stmt list) list * stmt list
   | Sfor of ident * bool * expr * expr * stmt list
   | Swhile of expr * stmt list

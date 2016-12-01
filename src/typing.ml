@@ -1,4 +1,9 @@
 (**
+ * - Execution doit terminer sur return
+ * - Utilisation de access
+ *)
+
+(**
  * Mini-Ada typer
  *
  * Identifiers:
@@ -40,6 +45,7 @@ type env = {
   def_functions : ((mode * typ) list * typ) Smap.t;
   const_vars : Sset.t;
   identifiers : dec_type Smap.t;
+  return_value : typ;
 }
 
 let empty_env =
@@ -53,6 +59,7 @@ let empty_env =
       );
     def_records = Smap.empty;
     (* Check it is legal *)
+    (* Nope (izi counter-example) *)
     def_procedures =
       Smap.add "put" [(Min, Tchar)] (
         Smap.singleton "new_line" []
@@ -60,6 +67,7 @@ let empty_env =
     def_functions = Smap.empty;
     const_vars = Sset.empty;
     identifiers = Smap.empty;
+    return_value = Tunit;
   }
 
 let add_identifier identifiers s dec_type loc =
@@ -78,6 +86,7 @@ let string_of_typ = function
   | Trecord r -> r
   | Taccess r -> "access " ^ r
   | Tnull     -> "access ..."
+  | Tunit     -> "void"
 
 let are_types_equal t1 t2 = match (t1, t2) with
   | a, b when a = b -> true
@@ -164,7 +173,10 @@ let rec type_expr env (e0, e0loc) =
   | Echar c -> (TEchar c, Tchar)
   | Ebool b -> (TEbool b, Tbool)
   | Eaccess (Aident i) ->
-    (TEaccess (TAident i), get_type env i e0loc)
+    (* Dirty hack *)
+    if Smap.mem i env.def_functions then
+      type_expr env (Ecall (i, []), e0loc)
+else (TEaccess (TAident i), get_type env i e0loc)
   | Eaccess (Arecord (e, i)) ->
     let (_, etype) as et = type_expr env e in
     let itype = begin match etype with
@@ -283,6 +295,7 @@ and type_decl env (d, dloc) = match d with
       decl_vars = List.fold_left (fun ans (id, _, t) -> Smap.add id t ans) env.decl_vars pl;
       const_vars = List.fold_left (fun ans (id, m, _) -> (begin match m with Min -> Sset.add id ans | _ -> ans end)) env.const_vars pl;
       identifiers = List.fold_left (fun ans (id, _, _) -> add_identifier ans id Dtype_other dloc) Smap.empty pl;
+      return_value = Tunit;
     } in
     let env' = type_decl_list env' dl in
     type_stmt_list env' sl;
@@ -307,6 +320,7 @@ and type_decl env (d, dloc) = match d with
       decl_vars = List.fold_left (fun ans (id, _, t) -> Smap.add id t ans) env.decl_vars pl;
       const_vars = List.fold_left (fun ans (id, m, _) -> (begin match m with Min -> Sset.add id ans | _ -> ans end)) env.const_vars pl;
       identifiers = List.fold_left (fun ans (id, _, _) -> add_identifier ans id Dtype_other dloc) Smap.empty pl;
+      return_value = rt;
     } in
     let env' = type_decl_list env' dl in
     type_stmt_list env' sl;
@@ -347,6 +361,11 @@ and type_stmt env (s, sloc) = match s with
     List.iter (fun ((e1, t1), (m2, t2)) -> if m2 = Minout then check_is_lvalue env e1 sloc; check_types_equal t1 t2 sloc) lc;
   | Sblock sl ->
     type_stmt_list env sl
+  | Sreturn None ->
+    check_types_equal Tunit env.return_value sloc
+  | Sreturn (Some e) ->
+    let (etree, etype) = type_expr env e in
+    check_types_equal etype env.return_value sloc
   | _ ->
     Format.eprintf "pas encore implemente\n@.";
     exit 2
