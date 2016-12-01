@@ -35,12 +35,10 @@ and mode =
 and stmt = stmt_desc * loc
 and stmt_desc = 
   | Saccess of access * expr
-  | Sproccall of ident
   | Scall of ident * expr list
   | Sreturn of expr option
   | Sblock of stmt list
-  (* TODO : change this *)
-  | Sif of (expr * stmt list) list * stmt list
+  | Sif of expr * stmt list * stmt list
   | Sfor of ident * bool * expr * expr * stmt list
   | Swhile of expr * stmt list
 

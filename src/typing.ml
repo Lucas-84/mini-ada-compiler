@@ -188,10 +188,14 @@ let rec type_expr env (e0, e0loc) =
     let (_, e1type) as e1t = type_expr env e1 in
     let (_, e2type) as e2t = type_expr env e2 in
     begin match op with
-      | Badd | Bsub | Bmul | Bdiv | Brem | Bgt | Bge | Blt | Ble ->
+      | Badd | Bsub | Bmul | Bdiv | Brem ->
         check_types_equal e1type Tint (snd e1);
         check_types_equal e2type Tint (snd e2);
         (TEbinop (e1t, op, e2t), Tint)
+      | Bgt | Bge | Blt | Ble ->
+        check_types_equal e1type Tint (snd e1);
+        check_types_equal e2type Tint (snd e2);
+        (TEbinop (e1t, op, e2t), Tbool)
       | Beq | Bneq ->
         check_types_equal e1type e2type e0loc;
         (TEbinop (e1t, op, e2t), Tbool)
@@ -366,9 +370,23 @@ and type_stmt env (s, sloc) = match s with
   | Sreturn (Some e) ->
     let (etree, etype) = type_expr env e in
     check_types_equal etype env.return_value sloc
-  | _ ->
-    Format.eprintf "pas encore implemente\n@.";
-    exit 2
+  | Swhile (e, sl) ->
+    let (etree, etype) = type_expr env e in
+    check_types_equal etype Tbool sloc;
+    type_stmt_list env sl
+  | Sif (e, i1, i2) ->
+    let (etree, etype) = type_expr env e in
+    check_types_equal etype Tbool sloc;
+    type_stmt_list env i1;
+    type_stmt_list env i2
+  | Sfor (i, rev, e1, e2, sl) ->
+    let (etree1, etype1) = type_expr env e1 in
+    let (etree2, etype2) = type_expr env e2 in
+    let env' = { env with decl_vars = Smap.add i Tint env.decl_vars;
+                          const_vars = Sset.add i env.const_vars } in
+    check_types_equal etype1 Tint sloc;
+    check_types_equal etype2 Tint sloc;
+    type_stmt_list env' sl
 
 and type_stmt_list env sl =
   List.iter (fun x -> type_stmt env x) sl

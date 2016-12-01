@@ -97,7 +97,7 @@ stmt:
 | BEGIN; s = stmt+; END; SEMICOLON
   { Sblock s, {fp = $startpos; lp = $endpos} }
 | IF; e = expr; THEN; s = stmt+; c = condition 
-  { let (l1, l2) = match c with Sif (a, b) -> (a, b) | _ -> assert false in Sif ((e, s) :: l1, l2), {fp = $startpos; lp = $endpos} }
+  { Sif (e, s, [c]), {fp = $startpos; lp = $endpos} }
 | FOR; i = IDENT; IN; r = REVERSE?; e1 = expr; DOUBLEDOT; e2 = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
   { Sfor (i, (match r with Some _ -> true | _ -> false), e1, e2, s), {fp = $startpos; lp = $endpos} }
 | WHILE; e = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
@@ -106,11 +106,11 @@ stmt:
 
 condition:
 | END; IF; SEMICOLON
-  { Sif ([], []) }
+  { Sblock [], {fp = $startpos; lp = $endpos} }
 | ELSE; s = stmt+; END; IF; SEMICOLON
-  { Sif ([], s) }
+  { Sblock s, {fp = $startpos; lp = $endpos} }
 | ELSIF; e = expr; THEN; s = stmt+; c = condition
-  { let (l1, l2) = match c with Sif (a, b) -> (a, b) | _ -> assert false in Sif ((e, s) :: l1, l2) }
+  { Sif (e, s, [c]), {fp = $startpos; lp = $endpos} }
 
 expr:
 | n = INT
