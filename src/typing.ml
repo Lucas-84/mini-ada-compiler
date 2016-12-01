@@ -22,6 +22,7 @@ exception Not_record of typ * loc
 exception Not_lvalue of loc
 exception Already_declared of ident * loc
 exception Declared_not_defined of ident * loc
+exception Same_member of ident * loc
 
 module Smap = Map.Make(String)
 module Sset = Set.Make(String)
@@ -126,6 +127,13 @@ let check_correctly_defined env t tloc = match t with
   | Trecord r -> check_is_defined env r tloc
   | _ -> ()
 
+let check_no_duplicates l loc =
+  let rec check = function
+    | [] | [_] -> ()
+    | h1 :: h2 :: t when h1 = h2 -> raise (Same_member (h1, loc))
+    | _ :: t -> check t
+  in check (List.sort compare l)
+
 let rec check_is_lvalue env e eloc = 
   let rec do_check e is_indirect =
     match e with
@@ -221,6 +229,7 @@ and type_decl env (d, dloc) = match d with
       identifiers = add_identifier env.identifiers i Dtype_other dloc;
     }
   | Drecordtype (i, fl) ->
+    check_no_duplicates (fst (List.split fl)) dloc;
     let env' =
     {
       env with
@@ -305,7 +314,7 @@ and type_decl env (d, dloc) = match d with
 
 and type_decl_list env dl =
   let env = (List.fold_left (fun ans x -> type_decl ans x) env dl) in
-  (* Dirty and wrong hack *)
+  (* Dirty and wrong hack for localization *)
   try check_all_defined env (snd (List.hd dl)); env with Failure _ -> env
 
 and type_stmt env (s, sloc) = match s with

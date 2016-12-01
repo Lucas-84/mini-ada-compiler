@@ -78,6 +78,10 @@ let () =
       report (loc.fp, loc.lp);
       Format.eprintf "\tthe type %s was declared but not defined\n@." i;
       exit 1
+    | Same_member (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\tstructure member %s was already declared\n@." i;
+      exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);
       exit 1
