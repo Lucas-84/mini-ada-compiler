@@ -68,7 +68,7 @@ decl:
 | TYPE; i1 = IDENT; IS; ACCESS; i2 = IDENT; SEMICOLON
   { Daccesstype (i1, i2), {fp = $startpos; lp = $endpos} }
 | TYPE; i = IDENT; IS; RECORD; f = field+; END; RECORD; SEMICOLON
-  { Drecordtype (i, f), {fp = $startpos; lp = $endpos} }
+  { Drecordtype (i, List.fold_left ( @ ) [] f), {fp = $startpos; lp = $endpos} }
 | i = separated_nonempty_list(COMMA, IDENT); COLON; t = stype; SEMICOLON
   { Dident (i, t, None), {fp = $startpos; lp = $endpos} }
 | i = separated_nonempty_list(COMMA, IDENT); COLON; t = stype; COLONEQ; e = expr; SEMICOLON
@@ -76,12 +76,12 @@ decl:
 | PROCEDURE; i1 = IDENT; p = params?; IS; d = decl*; BEGIN; s = stmt+; END; o2 = IDENT?; SEMICOLON
   {
     check_same_identifiers i1 o2; 
-    Dprocedure (i1, p, d, s), {fp = $startpos; lp = $endpos}
+    Dprocedure (i1, (match p with Some l -> l | None -> []), d, s), {fp = $startpos; lp = $endpos}
   }
 | FUNCTION; i1 = IDENT; p = params?; RETURN; t = stype; IS; d = decl*; BEGIN; s = stmt+; END; o2 = IDENT?; SEMICOLON
   {
     check_same_identifiers i1 o2;
-    Dfunction (i1, p, t, d, s), {fp = $startpos; lp = $endpos}
+    Dfunction (i1, (match p with Some l -> l | None -> []), t, d, s), {fp = $startpos; lp = $endpos}
   }
 ;
 
@@ -161,15 +161,15 @@ expr:
 
 field:
 | i = separated_nonempty_list(COMMA, IDENT); COLON; t = stype; SEMICOLON
-  { (i, t) }
+  { List.map (fun x -> (x, t)) i }
 
 params:
 | LPAR; p = separated_nonempty_list(SEMICOLON, param); RPAR
-  { p }
+  { List.fold_left ( @ ) [] p }
 
 param:
 | i = separated_nonempty_list(COMMA, IDENT); COLON; m = mode?; t = stype
-  { (i, m, t) }
+  { List.map (fun x -> (x, m, t)) i }
 
 (* TODO: test precedence here *)
 mode:

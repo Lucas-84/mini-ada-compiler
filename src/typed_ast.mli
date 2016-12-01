@@ -8,6 +8,7 @@ type typ =
   Tint | Tchar | Tbool | Trecord of ident | Taccess of ident | Tnull
 
 and texpr = texpr_desc * typ
+
 and texpr_desc =
   | TEint of int
   | TEchar of char
@@ -23,3 +24,5 @@ and texpr_desc =
 and taccess =
   | TAident of ident
   | TArecord of texpr * ident
+
+and tparam = ident * mode option * typ

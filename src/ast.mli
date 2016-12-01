@@ -19,16 +19,15 @@ and decl_desc =
   | Daccesstype of ident * ident 
   | Drecordtype of ident * field list
   | Dident of ident list * stype * expr option
-  | Dprocedure of ident * params option * decl list * stmt list
-  | Dfunction of ident * params option * stype * decl list * stmt list
+  | Dprocedure of ident * param list * decl list * stmt list
+  | Dfunction of ident * param list * stype * decl list * stmt list
 
-and field = ident list * stype
+and field = ident * stype
 and stype =
   | STident of ident
   | STaccess of ident
 
-and params = param list
-and param = ident list * mode option * stype
+and param = ident * mode option * stype
 and mode =
   | Min
   | Minout

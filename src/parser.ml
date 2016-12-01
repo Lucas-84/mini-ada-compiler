@@ -205,7 +205,7 @@ let rec _menhir_goto_option_IDENT_ : _menhir_env -> 'ttv_tail -> _menhir_state -
 # 82 "parser.mly"
   (
     check_same_identifiers i1 o2;
-    Dfunction (i1, p, t, d, s), {fp = _startpos; lp = _endpos}
+    Dfunction (i1, (match p with Some l -> l | None -> []), t, d, s), {fp = _startpos; lp = _endpos}
   )
 # 211 "parser.ml"
              in
@@ -263,7 +263,7 @@ let rec _menhir_goto_option_IDENT_ : _menhir_env -> 'ttv_tail -> _menhir_state -
 # 77 "parser.mly"
   (
     check_same_identifiers i1 o2; 
-    Dprocedure (i1, p, d, s), {fp = _startpos; lp = _endpos}
+    Dprocedure (i1, (match p with Some l -> l | None -> []), d, s), {fp = _startpos; lp = _endpos}
   )
 # 269 "parser.ml"
              in
@@ -1820,7 +1820,7 @@ and _menhir_goto_separated_nonempty_list_SEMICOLON_param_ : _menhir_env -> 'ttv_
             let _1 = () in
             let _v : 'tv_params = 
 # 168 "parser.mly"
-  ( p )
+  ( List.fold_left ( @ ) [] p )
 # 1825 "parser.ml"
              in
             let (_menhir_env : _menhir_env) = _menhir_env in
@@ -1929,7 +1929,7 @@ and _menhir_goto_nonempty_list_field_ : _menhir_env -> 'ttv_tail -> _menhir_stat
                     let _startpos = _startpos__1_ in
                     
 # 71 "parser.mly"
-  ( Drecordtype (i, f), {fp = _startpos; lp = _endpos} )
+  ( Drecordtype (i, List.fold_left ( @ ) [] f), {fp = _startpos; lp = _endpos} )
 # 1934 "parser.ml"
                      in
                     _menhir_goto_decl _menhir_env _menhir_stack _menhir_s _v) : 'freshtv578)) : 'freshtv580)
@@ -3890,7 +3890,7 @@ and _menhir_goto_stype : _menhir_env -> 'ttv_tail -> _menhir_state -> 'tv_stype 
             let _2 = () in
             let _v : 'tv_field = 
 # 164 "parser.mly"
-  ( (i, t) )
+  ( List.map (fun x -> (x, t)) i )
 # 3895 "parser.ml"
              in
             let (_menhir_env : _menhir_env) = _menhir_env in
@@ -3935,7 +3935,7 @@ and _menhir_goto_stype : _menhir_env -> 'ttv_tail -> _menhir_state -> 'tv_stype 
         let _2 = () in
         let _v : 'tv_param = 
 # 172 "parser.mly"
-  ( (i, m, t) )
+  ( List.map (fun x -> (x, m, t)) i )
 # 3940 "parser.ml"
          in
         let (_menhir_env : _menhir_env) = _menhir_env in
