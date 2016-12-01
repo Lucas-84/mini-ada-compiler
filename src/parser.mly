@@ -2,12 +2,19 @@
 
 %{
   open Ast
+  open Lexing
 
   let check_same_identifiers i1 o2 = match o2 with
     | Some i2 when String.lowercase_ascii i1 <> String.lowercase_ascii i2 -> failwith ("Two different identifiers")
     | _ -> ()
 
   let dummy_loc = {fp = Lexing.dummy_pos; lp = Lexing.dummy_pos}
+
+  let report (b, e) =
+    let l = b.pos_lnum in
+    let fc = b.pos_cnum - b.pos_bol + 1 in
+    let lc = e.pos_cnum - b.pos_bol + 1 in
+    Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" b.pos_fname l fc lc
 %}
 
 /* Token declaration */

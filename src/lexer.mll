@@ -25,10 +25,13 @@
     with
       Not_found -> IDENT (String.lowercase_ascii s)
 
+  (**
   let handle_newline lexbuf =
     let pos = lexbuf.lex_curr_p in
     lexbuf.lex_curr_p <-
-      { pos with pos_lnum = pos.pos_lnum + 1; pos_bol = pos.pos_cnum }
+      { pos with pos_lnum = pos.pos_lnum + 1;
+                 pos_bol  = pos.pos_cnum }
+  **)
 
   let compare_case_space_insensitive s t =
     let n = String.length s and m = String.length t in
@@ -53,8 +56,7 @@ let character = '\'' _ '\''
 let stdlib = "Ada.Text_IO" (* Handle spaces *)
 
 rule token = parse
-| ['\n']            { handle_newline lexbuf; token lexbuf }
-| space+            { token lexbuf }
+| space as c        { if c = '\n' then new_line lexbuf; token lexbuf }
 | "--"              { comment lexbuf }
 | charval as s      { if compare_case_space_insensitive s "character'val" then CHARVAL else raise (Lexing_error ("Invalid token" ^ s)) }
 | eof               { EOF } 
@@ -85,6 +87,6 @@ rule token = parse
   { raise (Lexing_error ("Invalid token " ^ (String.make 1 c))) }
 
 and comment = parse
-| "\n"      { token lexbuf }
+| "\n"      { new_line lexbuf; token lexbuf }
 | eof       { EOF }
 | _         { comment lexbuf }
