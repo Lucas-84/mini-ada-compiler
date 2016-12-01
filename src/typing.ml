@@ -176,7 +176,7 @@ let rec type_expr env (e0, e0loc) =
     (* Dirty hack *)
     if Smap.mem i env.def_functions then
       type_expr env (Ecall (i, []), e0loc)
-else (TEaccess (TAident i), get_type env i e0loc)
+    else (TEaccess (TAident i), get_type env i e0loc)
   | Eaccess (Arecord (e, i)) ->
     let (_, etype) as et = type_expr env e in
     let itype = begin match etype with
