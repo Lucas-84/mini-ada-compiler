@@ -3935,7 +3935,7 @@ and _menhir_goto_stype : _menhir_env -> 'ttv_tail -> _menhir_state -> 'tv_stype 
         let _2 = () in
         let _v : 'tv_param = 
 # 172 "parser.mly"
-  ( List.map (fun x -> (x, m, t)) i )
+  ( List.map (fun x -> (x, (match m with Some l -> l | None -> Min), t)) i )
 # 3940 "parser.ml"
          in
         let (_menhir_env : _menhir_env) = _menhir_env in

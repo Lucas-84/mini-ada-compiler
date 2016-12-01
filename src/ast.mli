@@ -27,7 +27,7 @@ and stype =
   | STident of ident
   | STaccess of ident
 
-and param = ident * mode option * stype
+and param = ident * mode * stype
 and mode =
   | Min
   | Minout

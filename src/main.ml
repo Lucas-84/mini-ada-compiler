@@ -64,7 +64,19 @@ let () =
       exit 1
     | Not_record (t, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\texpression has type %s but a record or an access type was expected\n@." (string_of_typ t);
+      Format.eprintf "\tthis expression has type %s but a record or an access type was expected\n@." (string_of_typ t);
+      exit 1
+    | Not_lvalue loc ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\tthis expression is not an lvalue\n@.";
+      exit 1
+    | Already_declared (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\tthe identifier %s was already declared\n@." i;
+      exit 1
+    | Declared_not_defined (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\tthe type %s was declared but not defined\n@." i;
       exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);

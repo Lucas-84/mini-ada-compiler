@@ -19,16 +19,26 @@ exception Undeclared of ident * loc
 exception Undefined of ident * loc
 exception Wrong_argument_number of int * int * loc
 exception Not_record of typ * loc
+exception Not_lvalue of loc
+exception Already_declared of ident * loc
+exception Declared_not_defined of ident * loc
 
 module Smap = Map.Make(String)
 module Sset = Set.Make(String)
+
+type dec_type =
+  | Dtype_dec
+  | Dtype_def
+  | Dtype_other
 
 type env = {
   decl_vars : typ Smap.t;
   decl_types : typ Smap.t;
   def_records : (typ Smap.t) Smap.t;
-  def_procedures : ((mode option * typ) list) Smap.t;
-  def_functions : ((mode option * typ) list * typ) Smap.t;
+  def_procedures : ((mode * typ) list) Smap.t;
+  def_functions : ((mode * typ) list * typ) Smap.t;
+  const_vars : Sset.t;
+  identifiers : dec_type Smap.t;
 }
 
 let empty_env =
@@ -43,11 +53,22 @@ let empty_env =
     def_records = Smap.empty;
     (* Check it is legal *)
     def_procedures =
-      Smap.add "put" [(None, Tchar)] (
+      Smap.add "put" [(Min, Tchar)] (
         Smap.singleton "new_line" []
       );
     def_functions = Smap.empty;
+    const_vars = Sset.empty;
+    identifiers = Smap.empty;
   }
+
+let add_identifier identifiers s dec_type loc =
+  try  
+    let prev_dec_type = Smap.find s identifiers in
+    begin match (prev_dec_type, dec_type) with
+      | (Dtype_dec, Dtype_def) -> raise Not_found 
+      | _ -> raise (Already_declared (s, loc));
+    end
+  with Not_found -> Smap.add s dec_type identifiers
 
 let string_of_typ = function
   | Tint      -> "int"
@@ -66,6 +87,9 @@ let are_types_equal t1 t2 = match (t1, t2) with
 let check_types_equal t1 t2 loc =
   if not (are_types_equal t1 t2) then
     raise (Typing_error (t1, t2, loc))
+
+let check_all_defined env loc =
+  Smap.iter (fun id dec_type -> (match dec_type with Dtype_dec -> raise (Declared_not_defined (id, loc)) | _ -> ())) env.identifiers
 
 let get_type env i iloc =
   try
@@ -102,6 +126,21 @@ let check_correctly_defined env t tloc = match t with
   | Trecord r -> check_is_defined env r tloc
   | _ -> ()
 
+let rec check_is_lvalue env e eloc = 
+  let rec do_check e is_indirect =
+    match e with
+    | TEaccess (TAident i) when not (Sset.mem i env.const_vars) -> ()
+    | TEaccess (TAident i) ->
+      begin match get_type env i eloc with
+        | Taccess r when is_indirect -> ();
+        | _ -> raise (Not_lvalue (eloc));
+      end
+    | TEaccess (TArecord ((e', Trecord _), _)) -> do_check e' true 
+    | TEaccess (TArecord ((e', Taccess r), _)) -> () 
+    | _ ->
+      raise (Not_lvalue (eloc)) in
+  do_check e false
+
 (**
 (* ('a list * 'b) list -> ('a * 'b) list *)
 let assemble l =
@@ -121,8 +160,8 @@ let rec type_expr env (e0, e0loc) =
   | Eaccess (Arecord (e, i)) ->
     let (_, etype) as et = type_expr env e in
     let itype = begin match etype with
-      | Taccess r -> get_member_type env r i e0loc
-      | _ -> raise (Typing_error (etype, Tnull, e0loc))
+      | Trecord r | Taccess r -> get_member_type env r i e0loc
+      | _ -> raise (Not_record (etype, e0loc))
     end in
     (TEaccess (TArecord (et, i)), itype)
   | Ebinop (e1, op, e2) ->
@@ -159,10 +198,10 @@ let rec type_expr env (e0, e0loc) =
     with Not_found ->
       raise (Undeclared (i, e0loc)) in
     let lc = try
-      List.combine pl el
+      List.combine el pl
     with Invalid_argument _ ->
       raise (Wrong_argument_number (List.length el, List.length pl, e0loc)) in
-    List.iter (fun ((_, t1), (_, t2)) -> check_types_equal t1 t2 e0loc) lc;
+    List.iter (fun ((e1, t1), (m2, t2)) -> if m2 = Minout then check_is_lvalue env e1 e0loc; check_types_equal t1 t2 e0loc) lc;
     (TEcall (i, el), rt)
 
 (* TODO : improve localization *)
@@ -172,18 +211,21 @@ and type_decl env (d, dloc) = match d with
     {
       env with
       decl_types = Smap.add i (Trecord i) env.decl_types;
+      identifiers = add_identifier env.identifiers i Dtype_dec dloc;
     }
   | Daccesstype (i, t) ->
     check_is_declared env t dloc;
     {
       env with
       decl_types = Smap.add i (Taccess t) env.decl_types;
+      identifiers = add_identifier env.identifiers i Dtype_other dloc;
     }
   | Drecordtype (i, fl) ->
     let env' =
     {
       env with
       decl_types = Smap.add i (Trecord i) env.decl_types;
+      identifiers = Smap.empty;
     } in
     let record_map = List.fold_left
       (fun ans (mem, stmem) ->
@@ -192,9 +234,9 @@ and type_decl env (d, dloc) = match d with
         Smap.add mem tmem ans)
       Smap.empty fl in
     {
-      env with
-      decl_types = Smap.add i (Trecord i) env.decl_types;
+      env' with
       def_records = Smap.add i record_map env.def_records; 
+      identifiers = add_identifier env.identifiers i Dtype_def dloc;
     }
   | Dident (il, st, None) ->
     let t = typ_of_stype env st dloc in
@@ -202,6 +244,7 @@ and type_decl env (d, dloc) = match d with
     {
       env with
       decl_vars = List.fold_left (fun ans x -> Smap.add x t ans) env.decl_vars il;
+      identifiers = List.fold_left (fun ans x -> add_identifier ans x Dtype_other dloc) env.identifiers il;
     }
   | Dident (il, st, Some e) ->
     let (etree, etype) = type_expr env e in
@@ -211,8 +254,10 @@ and type_decl env (d, dloc) = match d with
     {
       env with
       decl_vars = List.fold_left (fun ans x -> Smap.add x t ans) env.decl_vars il;
+      identifiers = List.fold_left (fun ans x -> add_identifier ans x Dtype_other dloc) env.identifiers il;
     }
   | Dprocedure (i, pl, dl, sl) ->
+    check_all_defined env dloc;
     let pl = List.map (fun (x, y, z) -> 
       let t = typ_of_stype env z dloc in
       check_correctly_defined env t dloc;
@@ -221,16 +266,20 @@ and type_decl env (d, dloc) = match d with
     {
       env with
       def_procedures = Smap.add i (List.map (fun (x, y, z) -> (y, z)) pl) env.def_procedures;
+      identifiers = add_identifier env.identifiers i Dtype_other dloc;
     } in
     let env' = 
     {
       env with
-      decl_vars = List.fold_left (fun ans (id, _, t) -> Smap.add id t ans) env.decl_vars pl
+      decl_vars = List.fold_left (fun ans (id, _, t) -> Smap.add id t ans) env.decl_vars pl;
+      const_vars = List.fold_left (fun ans (id, m, _) -> (begin match m with Min -> Sset.add id ans | _ -> ans end)) env.const_vars pl;
+      identifiers = List.fold_left (fun ans (id, _, _) -> add_identifier ans id Dtype_other dloc) Smap.empty pl;
     } in
     let env' = type_decl_list env' dl in
     type_stmt_list env' sl;
     env
   | Dfunction (i, pl, rt, dl, sl) ->
+    check_all_defined env dloc;
     let pl = List.map (fun (x, y, z) -> 
       let t = typ_of_stype env z dloc in
       check_correctly_defined env t dloc;
@@ -241,23 +290,29 @@ and type_decl env (d, dloc) = match d with
     {
       env with
       def_functions = Smap.add i (List.map (fun (x, y, z) -> (y, z)) pl, rt) env.def_functions;
+      identifiers = add_identifier env.identifiers i Dtype_other dloc;
     } in
     let env' = 
     {
       env with
-      decl_vars = List.fold_left (fun ans (id, _, t) -> Smap.add id t ans) env.decl_vars pl
+      decl_vars = List.fold_left (fun ans (id, _, t) -> Smap.add id t ans) env.decl_vars pl;
+      const_vars = List.fold_left (fun ans (id, m, _) -> (begin match m with Min -> Sset.add id ans | _ -> ans end)) env.const_vars pl;
+      identifiers = List.fold_left (fun ans (id, _, _) -> add_identifier ans id Dtype_other dloc) Smap.empty pl;
     } in
     let env' = type_decl_list env' dl in
     type_stmt_list env' sl;
     env
 
 and type_decl_list env dl =
-  List.fold_left (fun ans x -> type_decl ans x) env dl
+  let env = (List.fold_left (fun ans x -> type_decl ans x) env dl) in
+  (* Dirty and wrong hack *)
+  try check_all_defined env (snd (List.hd dl)); env with Failure _ -> env
 
 and type_stmt env (s, sloc) = match s with
   | Saccess (Aident i, e) ->
     let (etree, etype) = type_expr env e in
     let t = get_type env i sloc in
+    check_is_lvalue env (TEaccess (TAident i)) sloc;
     check_types_equal t etype sloc;
   | Saccess (Arecord (e, i), e') ->
     let (etree, etype) = type_expr env e in
@@ -269,6 +324,7 @@ and type_stmt env (s, sloc) = match s with
     end in
     let t = get_member_type env r i sloc in
     check_types_equal t etype' sloc;
+    check_is_lvalue env (TEaccess (TArecord ((etree, etype), i))) sloc;
   | Scall (i, el) ->
     let el = List.map (type_expr env) el in
     let pl = try
@@ -276,10 +332,10 @@ and type_stmt env (s, sloc) = match s with
     with Not_found ->
       raise (Undeclared (i, sloc)) in
     let lc = try
-      List.combine pl el
+      List.combine el pl
     with Invalid_argument _ ->
       raise (Wrong_argument_number (List.length el, List.length pl, sloc)) in
-    List.iter (fun ((_, t1), (_, t2)) -> check_types_equal t1 t2 sloc) lc;
+    List.iter (fun ((e1, t1), (m2, t2)) -> if m2 = Minout then check_is_lvalue env e1 sloc; check_types_equal t1 t2 sloc) lc;
   | Sblock sl ->
     type_stmt_list env sl
   | _ ->

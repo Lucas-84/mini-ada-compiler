@@ -169,7 +169,7 @@ params:
 
 param:
 | i = separated_nonempty_list(COMMA, IDENT); COLON; m = mode?; t = stype
-  { List.map (fun x -> (x, m, t)) i }
+  { List.map (fun x -> (x, (match m with Some l -> l | None -> Min), t)) i }
 
 (* TODO: test precedence here *)
 mode:
