@@ -43,12 +43,10 @@ let () =
       report (loc.fp, loc.lp);
       Format.eprintf "\tthis expression has type %s but is expected to have type %s\n@." (string_of_typ t1) (string_of_typ t2);
       exit 1
-      (**
-    | Unknown_variable (i, loc) ->
+    | Type_nequal (t, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "%s undeclared@." i;
+      Format.eprintf "\tthis expression has type %s but is expected to have a different type\n@." (string_of_typ t);
       exit 1
-      **)
     | Unknown_member (i1, i2, loc) ->
       report (loc.fp, loc.lp);
       Format.eprintf "\t%s is not a member of %s\n@." i1 i2;

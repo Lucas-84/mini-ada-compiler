@@ -9,12 +9,6 @@
     | _ -> ()
 
   let dummy_loc = {fp = Lexing.dummy_pos; lp = Lexing.dummy_pos}
-
-  let report (b, e) =
-    let l = b.pos_lnum in
-    let fc = b.pos_cnum - b.pos_bol + 1 in
-    let lc = e.pos_cnum - b.pos_bol + 1 in
-    Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" b.pos_fname l fc lc
 %}
 
 /* Token declaration */
@@ -65,7 +59,7 @@ file:
   SEMICOLON; EOF
   { 
     check_same_identifiers i1 o2;
-    { procedure = i1; glob_decl = d; stmts = s }
+    { main_name = i1; glob_decl = d; stmts = s }
   }
 ;
 
@@ -83,7 +77,7 @@ decl:
 | PROCEDURE; i1 = IDENT; p = params?; IS; d = decl*; BEGIN; s = stmt+; END; o2 = IDENT?; SEMICOLON
   {
     check_same_identifiers i1 o2; 
-    Dprocedure (i1, (match p with Some l -> l | None -> []), d, s), {fp = $startpos; lp = $endpos}
+    Dfunction (i1, (match p with Some l -> l | None -> []), STunit, d, s), {fp = $startpos; lp = $endpos}
   }
 | FUNCTION; i1 = IDENT; p = params?; RETURN; t = stype; IS; d = decl*; BEGIN; s = stmt+; END; o2 = IDENT?; SEMICOLON
   {

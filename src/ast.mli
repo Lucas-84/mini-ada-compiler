@@ -8,7 +8,7 @@ type loc = {
 }
 
 and file = {
-  procedure : ident;
+  main_name : ident;
   glob_decl : decl list;
   stmts : stmt list;
 }
@@ -19,13 +19,13 @@ and decl_desc =
   | Daccesstype of ident * ident 
   | Drecordtype of ident * field list
   | Dident of ident list * stype * expr option
-  | Dprocedure of ident * param list * decl list * stmt list
   | Dfunction of ident * param list * stype * decl list * stmt list
 
 and field = ident * stype
 and stype =
   | STident of ident
   | STaccess of ident
+  | STunit
 
 and param = ident * mode * stype
 and mode =
