@@ -18,6 +18,7 @@ and decl_desc =
   | Dtype of ident
   | Daccesstype of ident * ident 
   | Drecordtype of ident * field list
+  (* TODO: transform to ident * stype * expr option in parser *)
   | Dident of ident list * stype * expr option
   | Dfunction of ident * param list * stype * decl list * stmt list
 

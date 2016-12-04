@@ -18,16 +18,13 @@ let report (b, e) =
 let () =
   Arg.parse ["--type-only", Arg.Unit (fun () -> type_only := true), "Type only";
              "--parse-only", Arg.Unit (fun () -> parse_only := true), "Parse only"] (fun s -> in_file := s) "Mini Ada compiler";
-  (*Printf.printf "Compiling file %s\n" !in_file;*)
   let in_chan = open_in !in_file in
   let buf = Lexing.from_channel in_chan in
   try
     let ast = Parser.file Lexer.token buf in
-    (*Printf.printf "Syntax checking completed\n";*)
     if not !parse_only then begin
       let _ = type_file ast in
       ()
-      (*Printf.printf "Type checking completed\n";*)
     end;
     close_in in_chan
   with 
@@ -39,11 +36,15 @@ let () =
       report (lexeme_start_p buf, lexeme_end_p buf);
       Format.eprintf "\tsyntax error\n@." ;
       exit 1
+    | Reserved_ident (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\t%s is a reserved identifier\n@." i;
+      exit 1
     | Typing_error (t1, t2, loc) ->
       report (loc.fp, loc.lp);
       Format.eprintf "\tthis expression has type %s but is expected to have type %s\n@." (string_of_typ t1) (string_of_typ t2);
       exit 1
-    | Type_nequal (t, loc) ->
+    | Type_not_equal (t, loc) ->
       report (loc.fp, loc.lp);
       Format.eprintf "\tthis expression has type %s but is expected to have a different type\n@." (string_of_typ t);
       exit 1
@@ -75,13 +76,17 @@ let () =
       report (loc.fp, loc.lp);
       Format.eprintf "\tthe identifier %s was already declared\n@." i;
       exit 1
-    | Declared_not_defined (i, loc) ->
+    | Declared_not_defined loc ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\tthe type %s was declared but not defined\n@." i;
+      Format.eprintf "\tsome variable was declared but not defined\n@.";
       exit 1
     | Same_member (i, loc) ->
       report (loc.fp, loc.lp);
       Format.eprintf "\tstructure member %s was already declared\n@." i;
+      exit 1
+    | Recursive_dec (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\trecursive typing declaration of %s\n@." i;
       exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);

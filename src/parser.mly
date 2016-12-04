@@ -8,7 +8,8 @@
     | Some i2 when String.lowercase_ascii i1 <> String.lowercase_ascii i2 -> failwith ("Two different identifiers")
     | _ -> ()
 
-  let dummy_loc = {fp = Lexing.dummy_pos; lp = Lexing.dummy_pos}
+  let dummy_loc =
+    { fp = Lexing.dummy_pos; lp = Lexing.dummy_pos }
 %}
 
 /* Token declaration */
@@ -32,7 +33,6 @@
 
 /* Token precedence */
 
-//%nonassoc IF
 %left OR
 %left AND
 %nonassoc NOT
