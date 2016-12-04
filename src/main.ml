@@ -88,6 +88,10 @@ let () =
       report (loc.fp, loc.lp);
       Format.eprintf "\trecursive typing declaration of %s\n@." i;
       exit 1
+    | No_return (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\tno return in function %s returning non-void\n@." i;
+      exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);
       exit 1

@@ -50,7 +50,7 @@ type env = {
   nb_incomplete : int;
 }
 
-let reserved_idents = ["put"; "newline"]
+let reserved_idents = ["put"; "new_line"]
 
 (********************************************************************************)
 let add_ident i dec_typ level loc idents =
@@ -159,7 +159,9 @@ let empty_env name =
     add_typ_dec "character" Tchar false dummy_loc (
       add_typ_dec "boolean" Tbool false dummy_loc (
         add_fun_def "put" [(Min, Tchar)] Tunit dummy_loc (
-          add_fun_def "new_line" [] Tunit dummy_loc env
+          add_fun_def "new_line" [] Tunit dummy_loc (
+            add_fun_def name [] Tunit dummy_loc env
+          )
         )
       )
     )
@@ -203,7 +205,7 @@ let typ_of_stype st loc env =
       | Taccess (_, level) -> Taccess (r, level)
       | Trecord (_, level) -> Taccess (r, level)
       (* TODO: Pointer on a non-structure type *)
-      | _ -> assert false
+      | _ -> exit 2
     end
   | STunit     -> Tunit
 
@@ -337,13 +339,14 @@ and type_decl_list env dl =
 
 and type_stmt env (s, loc) = match s with
   | Saccess (Aident i, e) ->
+    check_is_lvalue (TEaccess (TAident i)) loc env;
     let (_, etype) as et = type_expr env e in
     let t = var_typ_of_ident i loc env in
-    check_is_lvalue (TEaccess (TAident i)) loc env;
     check_types_equal t etype loc;
     TSaccess (TAident i, et), false
   | Saccess (Arecord (e, i), e') ->
     let (_, etype) as et = type_expr env e in
+    check_is_lvalue (TEaccess (TArecord (et, i))) loc env;
     let (_, etype') as et' = type_expr env e' in
     let r = begin match etype with
       | Trecord r -> r
@@ -352,7 +355,6 @@ and type_stmt env (s, loc) = match s with
     end in
     let t = mem_typ_of_tident r i loc env in
     check_types_equal t etype' loc;
-    check_is_lvalue (TEaccess (TArecord (et, i))) loc env;
     TSaccess (TArecord (et, i), et'), false
   | Scall (i, el) ->
     let (tel, rt) = type_fun_call env false i el loc in
