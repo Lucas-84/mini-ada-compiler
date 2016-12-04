@@ -7,7 +7,7 @@ open Ast
 type tident = ident * int
 
 and typ =
-  Tint | Tchar | Tbool | Trecord of tident | Taccess of tident | Tnull | Tunit
+  Tint | Tchar | Tbool | Trecord of tident | Taccess of tident | Tnull | Tunit | Tincomplete
 
 and tfile = {
   main_name : ident;
