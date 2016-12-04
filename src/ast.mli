@@ -8,44 +8,48 @@ type loc = {
 }
 
 and file = {
-  main_name : ident;
-  glob_decl : decl list;
-  stmts : stmt list;
+  main_name : ident_loc;
+  glob_decl : decl_loc list;
+  stmts : stmt_loc list;
 }
 
-and decl = decl_desc * loc
-and decl_desc =
-  | Dtype of ident
-  | Daccesstype of ident * ident 
-  | Drecordtype of ident * field list
+and decl_loc = decl * loc
+and decl =
+  | Dtype of ident_loc
+  | Daccesstype of ident_loc * ident_loc
+  | Drecordtype of ident_loc * field list
   (* TODO: transform to ident * stype * expr option in parser *)
-  | Dident of ident list * stype * expr option
-  | Dfunction of ident * param list * stype * decl list * stmt list
+  | Dident of ident_loc list * stype_loc * expr_loc option
+  | Dfunction of ident_loc * param list * stype_loc * decl_loc list * stmt_loc list
 
-and field = ident * stype
+and field = ident_loc * stype_loc
+
+and stype_loc = stype * loc
 and stype =
-  | STident of ident
-  | STaccess of ident
+  | STident of ident_loc
+  | STaccess of ident_loc
   | STunit
 
-and param = ident * mode * stype
+and param = ident_loc * mode * stype_loc
+
 and mode =
   | Min
   | Minout
 
-and stmt = stmt_desc * loc
-and stmt_desc = 
-  | Saccess of access * expr
-  | Scall of ident * expr list
-  | Sreturn of expr option
-  | Sblock of stmt list
-  | Sif of expr * stmt list * stmt list
-  | Sfor of ident * bool * expr * expr * stmt list
-  | Swhile of expr * stmt list
+and stmt_loc = stmt * loc
+and stmt = 
+  | Saccess of access_loc * expr_loc
+  | Scall of ident_loc * expr_loc list
+  | Sreturn of expr_loc option
+  | Sblock of stmt_loc list
+  | Sif of expr_loc * stmt_loc list * stmt_loc list
+  | Sfor of ident_loc * bool * expr_loc * expr_loc * stmt_loc list
+  | Swhile of expr_loc * stmt_loc list
 
+and access_loc = access * loc
 and access =
-  | Aident of ident 
-  | Arecord of expr * ident
+  | Aident of ident_loc 
+  | Arecord of expr_loc * ident_loc
 
 and binop =
   | Beq 
@@ -64,17 +68,18 @@ and binop =
   | Bandthen
   | Borelse
 
-and expr = expr_desc * loc
-and expr_desc =
+and expr_loc = expr * loc
+and expr =
   | Eint of int
   | Echar of char
   | Ebool of bool
   | Enull
-  | Eaccess of access
-  | Ebinop of expr * binop * expr
-  | Eneg of expr
-  | Enew of ident
-  | Ecall of ident * expr list
-  | Echarval of expr
+  | Eaccess of access_loc
+  | Ebinop of expr_loc * binop * expr_loc
+  | Eneg of expr_loc
+  | Enew of ident_loc
+  | Ecall of ident_loc * expr_loc list
+  | Echarval of expr_loc
 
+and ident_loc = string * loc
 and ident = string

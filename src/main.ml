@@ -92,6 +92,10 @@ let () =
       report (loc.fp, loc.lp);
       Format.eprintf "\tno return in function %s returning non-void\n@." i;
       exit 1
+    | Bad_access_type (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "\tmini-ada does not support access on non-record type such as %s\n" i;
+      exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);
       exit 1
