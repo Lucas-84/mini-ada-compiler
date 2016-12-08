@@ -21,9 +21,9 @@
   (* Return the token matching the identifier s *)
   let token_of_ident s =
     try
-      List.assoc (String.lowercase_ascii s) keywords
+      List.assoc (String.lowercase s) keywords
     with
-      Not_found -> IDENT (String.lowercase_ascii s)
+      Not_found -> IDENT (String.lowercase s)
 
   (**
   let handle_newline lexbuf =
@@ -41,7 +41,7 @@
       else if i < n && List.mem s.[i] space then do_from (i + 1) j
       else if j < m && List.mem t.[j] space then do_from i (j + 1)
       else if (i < n && j >= m) || (i >= n && j < n) then false
-      else Char.lowercase_ascii s.[i] = Char.lowercase_ascii t.[j] && (do_from (i + 1) (j + 1))
+      else Char.lowercase s.[i] = Char.lowercase t.[j] && (do_from (i + 1) (j + 1))
     in
     do_from 0 0
 }

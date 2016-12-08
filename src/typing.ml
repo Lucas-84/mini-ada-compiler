@@ -2,7 +2,6 @@ open Ast
 open Typed_ast
 (* DEBUG *) open Printf
 
-(* TODO *)
 let dummy_loc =
   { fp = Lexing.dummy_pos; lp = Lexing.dummy_pos }
 
@@ -21,6 +20,7 @@ exception Same_member of ident * loc
 exception Recursive_dec of ident * loc
 exception No_return of ident * loc
 exception Bad_access_type of ident * loc
+exception Used_before_end of ident * loc
 
 module Smap = Map.Make(String)
 module Sset = Set.Make(String)
@@ -45,6 +45,7 @@ type env = {
   def_recs : (typ Smap.t) SImap.t;
   def_funs : ((mode * typ) list * typ) Smap.t;
   const_vars : Sset.t;
+  for_vars : Sset.t;
   idents : (dtyp * int) Smap.t;
   return_value : typ;
   level : int;
@@ -71,11 +72,12 @@ let add_ident (i, loc) dec_typ level idents =
     else raise (Already_declared (i, loc))
   with Not_found -> Smap.add i (dec_typ, level) idents
 
-let add_var_dec (i, loc) typ is_const env =
+let add_var_dec (i, loc) typ is_const is_for env =
   { env with
     idents = add_ident (i, loc) Dtyp_var_dec env.level env.idents;
     dec_vars = Smap.add i typ env.dec_vars;
-    const_vars = if is_const then Sset.add i env.const_vars else Sset.remove i env.const_vars }
+    const_vars = if is_const then Sset.add i env.const_vars else Sset.remove i env.const_vars;
+    for_vars = if is_for then Sset.add i env.for_vars else Sset.remove i env.for_vars }
   
 let add_rec_def (i, loc) members env =
   { env with
@@ -103,7 +105,10 @@ let level_of_ident (i, loc) env =
   with Not_found -> raise (Undeclared (i, loc))
 
 let dtyp_of_ident (i, loc) env =
-  try fst (Smap.find i env.idents) with Not_found -> raise (Undeclared (i, loc))
+  try
+    if Sset.mem i env.for_vars then raise (Used_before_end (i, loc));
+    fst (Smap.find i env.idents)
+  with Not_found -> raise (Undeclared (i, loc))
 
 let var_typ_of_ident (i, loc) env =
   try
@@ -157,6 +162,7 @@ let empty_env name =
               def_recs = SImap.empty;
               def_funs = Smap.empty;
               const_vars = Sset.empty;
+              for_vars = Sset.empty;
               idents = Smap.empty;
               return_value = Tunit;
               level = -1;
@@ -192,7 +198,13 @@ let check_all_defined env loc =
 let check_is_declared i env =
   let _ = dec_typ_of_ident i env in ()
 
-let check_is_defined r env = let _ = mem_list_of_ident r env in ()
+let check_is_defined r env = let _ =
+  mem_list_of_ident r env in ()
+
+let ident_of_stype (t, _) = match t with 
+  | STident r -> r
+  | STaccess r -> r
+  | _ -> assert false 
 
 let check_correctly_defined t loc env = match t with
   | Taccess (r, _) -> check_is_declared (r, loc) env
@@ -290,6 +302,7 @@ and type_decl env (d, loc) = match d with
     add_typ_dec i (Trecord (fst i, env.level)) true env, TDtype (fst i)
   | Daccesstype (i, t) ->
     check_is_declared t env;
+    (* TODO : improve *)
     begin match dec_typ_of_ident t env with
       | Trecord _ -> ()
       | _ -> raise (Bad_access_type (fst t, loc))
@@ -298,15 +311,17 @@ and type_decl env (d, loc) = match d with
     add_typ_dec i (Taccess (fst t, (level_of_ident t env))) false env, TDaccesstype (fst i, fst t)
   | Drecordtype (i, fl) ->
     let (field_idents, field_styp) = List.split fl in
-    let field_str = fst (List.split field_idents) in
+    let field_name_str = fst (List.split field_idents) in
     check_no_duplicates field_idents;
     let env' = add_typ_dec i (Trecord (fst i, env.level)) false env in
     let field_typ = List.map (fun x -> typ_of_stype x env') field_styp in
-    let nfl = List.combine field_str field_typ in
+    let nfl = List.combine field_name_str field_typ in
+    let _ = List.fold_left (fun ans (s, t) -> let ans' = add_var_dec s (typ_of_stype t ans) false false ans in check_is_declared (ident_of_stype t) ans'; ans') {env' with level = env'.level + 1} (List.combine field_idents field_styp) in
     let record_map = List.fold_left (fun ans (s, t) -> Smap.add s t ans) Smap.empty nfl in
     (add_rec_def i record_map env, TDrecordtype (fst i, nfl))
   | Dident (il, ((_, stloc) as st), einit) ->
     let t = typ_of_stype st env in
+    (* Same as above *)
     let teinit = begin match einit with
       | None -> None 
       | Some e ->
@@ -314,13 +329,15 @@ and type_decl env (d, loc) = match d with
         check_types_equal t etype (snd e);
         Some et
     end in
-    (List.fold_left (fun ans x -> add_var_dec x t false ans) env il, TDident (fst (List.split il), t, teinit))
+    let st_ident = ident_of_stype st in
+    if List.mem (fst st_ident) (fst (List.split il)) then raise (Undeclared (fst st_ident, snd st_ident));
+    (List.fold_left (fun ans x -> add_var_dec x t false false ans) env il, TDident (fst (List.split il), t, teinit))
   | Dfunction (i, pl, ((_, rtloc) as rt), dl, sl) ->
     check_all_defined env loc;
     let tpl = List.map (fun (id, m, st) -> (id, m, typ_of_stype st env)) pl in
     let rt = typ_of_stype rt env in
     let env = add_fun_def i (List.map (fun (_, m, t) -> (m, t)) tpl) rt env in
-    let env' = List.fold_left (fun ans (id, mode, t) -> add_var_dec id t (mode = Min) ans) {env with return_value = rt; level = env.level + 1} tpl in
+    let env' = List.fold_left (fun ans (id, mode, t) -> add_var_dec id t (mode = Min) false ans) {env with return_value = rt; level = env.level + 1} tpl in
     let (env', tdl) = type_decl_list env' dl in
     let (tsl, is_return) = type_stmt_list env' sl in
     if rt <> Tunit && not is_return then raise (No_return (fst i, loc));
@@ -368,8 +385,8 @@ and type_stmt env (s, loc) = match s with
   | Swhile (e, sl) ->
     let (_, etype) as et = type_expr env e in
     check_types_equal etype Tbool (snd e);
-    let (tsl, is_return) = type_stmt_list env sl in
-    TSwhile (et, tsl), is_return
+    let (tsl, _) = type_stmt_list env sl in
+    TSwhile (et, tsl), false
   | Sif (e, sl1, sl2) ->
     let (_, etype) as et = type_expr env e in
     check_types_equal etype Tbool (snd e);
@@ -377,13 +394,14 @@ and type_stmt env (s, loc) = match s with
     let (tsl2, is_return_2) = type_stmt_list env sl2 in
     TSif (et, tsl1, tsl2), is_return_1 && is_return_2
   | Sfor (i, rev, e1, e2, sl) ->
-    let (_, etype1) as et1 = type_expr env e1 in
-    let (_, etype2) as et2 = type_expr env e2 in
-    let env' = add_var_dec i Tint true { env with level = env.level + 1 } in
+    let env' = add_var_dec i Tint true true { env with level = env.level + 1 } in
+    let (_, etype1) as et1 = type_expr env' e1 in
+    let (_, etype2) as et2 = type_expr env' e2 in
+    let env' = add_var_dec i Tint true false { env with level = env.level + 1 } in
     check_types_equal etype1 Tint (snd e1);
     check_types_equal etype2 Tint (snd e2);
-    let (tsl, is_return) = type_stmt_list env' sl in
-    TSfor (fst i, rev, et1, et2, tsl), is_return
+    let (tsl, _) = type_stmt_list env' sl in
+    TSfor (fst i, rev, et1, et2, tsl), false
 
 and type_stmt_list env sl =
   List.fold_left (fun (ans_tsl, ans_return) x ->

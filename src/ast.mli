@@ -7,7 +7,7 @@ type loc = {
   lp : Lexing.position;
 }
 
-and file = {
+type file = {
   main_name : ident_loc;
   glob_decl : decl_loc list;
   stmts : stmt_loc list;

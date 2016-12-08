@@ -96,6 +96,10 @@ let () =
       report (loc.fp, loc.lp);
       Format.eprintf "\tmini-ada does not support access on non-record type such as %s\n" i;
       exit 1
+    | Used_before_end (i, loc) ->
+      report (loc.fp, loc.fp);
+      Format.eprintf "\tvariable %s is used before the end of its declaration\n" i;
+      exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);
       exit 1

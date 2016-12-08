@@ -5,7 +5,7 @@
   open Lexing
 
   let check_same_identifiers (i1, _) o2 = match o2 with
-    | Some (i2, _) when String.lowercase_ascii i1 <> String.lowercase_ascii i2 -> failwith ("Two different identifiers")
+    | Some (i2, _) when String.lowercase i1 <> String.lowercase i2 -> failwith ("Two different identifiers")
     | _ -> ()
 
   let dummy_loc =
