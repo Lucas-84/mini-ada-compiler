@@ -7,14 +7,14 @@ EXEC_FILE = adac
 all: depend $(EXEC_FILE)
 
 clean:
-	rm -f *.cm[iox] *~ .*~ #*#
+	rm -f *.cm[io] *~ .*~ #*#
 	rm -f $(EXEC_FILE)
 	rm -f parser.mli parser.ml lexer.ml
 
 $(EXEC_FILE): $(OBJECTS)
 	ocamlc $(OBJECTS) -o $(EXEC_FILE)
 
-.SUFFIXES: .ml .mli .cmo .cmi .cmx .mll .mly
+.SUFFIXES: .ml .mli .cmo .cmi .mll .mly
 
 .ml.cmo:
 	ocamlc -c $<
