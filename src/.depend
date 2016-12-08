@@ -1,14 +1,10 @@
 ast.cmi :
 parser.cmi : ast.cmi
-typed_ast.cmi : ast.cmi
-x86_64.cmi :
 lexer.cmo : parser.cmi
 lexer.cmx : parser.cmx
-main.cmo : typing.cmo typed_ast.cmi parser.cmi lexer.cmo ast.cmi
-main.cmx : typing.cmx typed_ast.cmi parser.cmx lexer.cmx ast.cmi
+main.cmo : typer.cmo parser.cmi lexer.cmo ast.cmi
+main.cmx : typer.cmx parser.cmx lexer.cmx ast.cmi
 parser.cmo : ast.cmi parser.cmi
 parser.cmx : ast.cmi parser.cmi
-typing.cmo : typed_ast.cmi ast.cmi
-typing.cmx : typed_ast.cmi ast.cmi
-x86_64.cmo : x86_64.cmi
-x86_64.cmx : x86_64.cmi
+typer.cmo : ast.cmi
+typer.cmx : ast.cmi

@@ -1,9 +1,7 @@
+(*
+ * Mini Ada typer
+ *)
 open Ast
-open Typed_ast
-(* DEBUG *) open Printf
-
-let dummy_loc =
-  { fp = Lexing.dummy_pos; lp = Lexing.dummy_pos }
 
 exception Reserved_ident of ident * loc
 exception Typing_error of typ * typ * loc 
@@ -51,6 +49,9 @@ type env = {
   level : int;
   nb_incomplete : int;
 }
+
+let dummy_loc =
+  { fp = Lexing.dummy_pos; lp = Lexing.dummy_pos }
 
 let reserved_idents = ["put"; "new_line"]
 
@@ -166,7 +167,7 @@ let empty_env name =
               idents = Smap.empty;
               return_value = Tunit;
               level = -1;
-              nb_incomplete = 0} in
+              nb_incomplete = 0 } in
   let env = add_typ_dec ("integer", dummy_loc) Tint false (
     add_typ_dec ("character", dummy_loc) Tchar false (
       add_typ_dec ("boolean", dummy_loc) Tbool false  (
@@ -242,8 +243,11 @@ let rec type_fun_call env is_exp i el loc =
   let etl = List.map (fun x -> type_expr env x, snd x) el in
   let (pl, rt) = fun_of_ident i env in
   (if is_exp then check_types_not_equal else check_types_equal) rt Tunit loc;
-  let lc = try List.combine etl pl with Invalid_argument _ -> raise (Wrong_argument_number (List.length el, List.length pl, loc)) in
-  List.iter (fun (((exp, typ1), eloc), (mode, typ2)) -> if mode = Minout then check_is_lvalue exp eloc env; check_types_equal typ1 typ2 eloc) lc;  
+  let lc = try List.combine etl pl with Invalid_argument _ ->
+    raise (Wrong_argument_number (List.length el, List.length pl, loc)) in
+  List.iter (fun (((exp, typ1), eloc), (mode, typ2)) ->
+    if mode = Minout then check_is_lvalue exp eloc env;
+    check_types_equal typ1 typ2 eloc) lc;  
   (fst (List.split etl), rt)
 
 and type_expr env (e, loc) = match e with
@@ -252,8 +256,10 @@ and type_expr env (e, loc) = match e with
   | Echar c -> (TEchar c, Tchar)
   | Ebool b -> (TEbool b, Tbool)
   | Eaccess (Aident i, _) ->
-    if dtyp_of_ident i env = Dtyp_fun_def then type_expr env (Ecall (i, []), loc)
-    else (TEaccess (TAident (fst i)), var_typ_of_ident i env)
+    if dtyp_of_ident i env = Dtyp_fun_def then
+      type_expr env (Ecall (i, []), loc)
+    else
+      (TEaccess (TAident (fst i)), var_typ_of_ident i env)
   | Eaccess (Arecord ((_, eloc) as e, i), _) ->
     let (_, etype) as et = type_expr env e in
     let itype = begin match etype with
@@ -296,19 +302,18 @@ and type_expr env (e, loc) = match e with
     let (el, rt) = type_fun_call env true i el loc in
     (TEcall (fst i, el), rt)
 
-(* TODO : fields legal identifiers? *)
 and type_decl env (d, loc) = match d with
   | Dtype i ->
     add_typ_dec i (Trecord (fst i, env.level)) true env, TDtype (fst i)
   | Daccesstype (i, t) ->
     check_is_declared t env;
-    (* TODO : improve *)
     begin match dec_typ_of_ident t env with
       | Trecord _ -> ()
       | _ -> raise (Bad_access_type (fst t, loc))
     end;
     if fst i = fst t then raise (Recursive_dec (fst i, loc));
-    add_typ_dec i (Taccess (fst t, (level_of_ident t env))) false env, TDaccesstype (fst i, fst t)
+    add_typ_dec i (Taccess (fst t, (level_of_ident t env))) false env,
+                   TDaccesstype (fst i, fst t)
   | Drecordtype (i, fl) ->
     let (field_idents, field_styp) = List.split fl in
     let field_name_str = fst (List.split field_idents) in
@@ -316,12 +321,16 @@ and type_decl env (d, loc) = match d with
     let env' = add_typ_dec i (Trecord (fst i, env.level)) false env in
     let field_typ = List.map (fun x -> typ_of_stype x env') field_styp in
     let nfl = List.combine field_name_str field_typ in
-    let _ = List.fold_left (fun ans (s, t) -> let ans' = add_var_dec s (typ_of_stype t ans) false false ans in check_is_declared (ident_of_stype t) ans'; ans') {env' with level = env'.level + 1} (List.combine field_idents field_styp) in
-    let record_map = List.fold_left (fun ans (s, t) -> Smap.add s t ans) Smap.empty nfl in
+    let _ = List.fold_left (fun ans (s, st) ->
+      let ans' = add_var_dec s (typ_of_stype st ans) false false ans in
+      check_is_declared (ident_of_stype st) ans'; ans')
+                        {env' with level = env'.level + 1}
+                        (List.combine field_idents field_styp) in
+    let record_map = List.fold_left (fun ans (s, t) -> Smap.add s t ans)
+                                    Smap.empty nfl in
     (add_rec_def i record_map env, TDrecordtype (fst i, nfl))
   | Dident (il, ((_, stloc) as st), einit) ->
     let t = typ_of_stype st env in
-    (* Same as above *)
     let teinit = begin match einit with
       | None -> None 
       | Some e ->
@@ -330,25 +339,33 @@ and type_decl env (d, loc) = match d with
         Some et
     end in
     let st_ident = ident_of_stype st in
-    if List.mem (fst st_ident) (fst (List.split il)) then raise (Undeclared (fst st_ident, snd st_ident));
-    (List.fold_left (fun ans x -> add_var_dec x t false false ans) env il, TDident (fst (List.split il), t, teinit))
+    if List.mem (fst st_ident) (fst (List.split il)) then
+      raise (Undeclared (fst st_ident, snd st_ident));
+    (List.fold_left (fun ans x -> add_var_dec x t false false ans) env il,
+     TDident (fst (List.split il), t, teinit))
   | Dfunction (i, pl, ((_, rtloc) as rt), dl, sl) ->
     check_all_defined env loc;
     let tpl = List.map (fun (id, m, st) -> (id, m, typ_of_stype st env)) pl in
     let rt = typ_of_stype rt env in
     let env = add_fun_def i (List.map (fun (_, m, t) -> (m, t)) tpl) rt env in
-    let env' = List.fold_left (fun ans (id, mode, t) -> add_var_dec id t (mode = Min) false ans) {env with return_value = rt; level = env.level + 1} tpl in
+    let env' = List.fold_left
+      (fun ans (id, mode, t) -> add_var_dec id t (mode = Min) false ans)
+      {env with return_value = rt; level = env.level + 1} tpl in
     let (env', tdl) = type_decl_list env' dl in
     let (tsl, is_return) = type_stmt_list env' sl in
     if rt <> Tunit && not is_return then raise (No_return (fst i, loc));
-    (env, TDfunction (fst i, List.map (fun (x, y, z) -> fst x, y, z) tpl, rt, tdl, tsl))
+    (env, TDfunction (fst i, List.map (fun (x, y, z) -> fst x, y, z) tpl,
+                      rt, tdl, tsl))
 
 and type_decl_list env dl =
   let (env, tdl) = List.fold_left
     (fun (penv, ptdl) d -> let (nenv, td) = type_decl penv d in
                            (nenv, td :: ptdl))
     (env, []) dl in
-  try check_all_defined env (snd (List.hd (List.rev dl))); (env, tdl) with Failure _ -> (env, tdl)
+  try
+    check_all_defined env (snd (List.hd (List.rev dl)));
+    (env, tdl)
+  with Failure _ -> (env, tdl)
   
 and type_stmt env (s, loc) = match s with
   | Saccess ((Aident i, aloc), ((_, eloc) as e)) ->
@@ -394,10 +411,12 @@ and type_stmt env (s, loc) = match s with
     let (tsl2, is_return_2) = type_stmt_list env sl2 in
     TSif (et, tsl1, tsl2), is_return_1 && is_return_2
   | Sfor (i, rev, e1, e2, sl) ->
-    let env' = add_var_dec i Tint true true { env with level = env.level + 1 } in
+    let env' = add_var_dec i Tint true true
+                             { env with level = env.level + 1 } in
     let (_, etype1) as et1 = type_expr env' e1 in
     let (_, etype2) as et2 = type_expr env' e2 in
-    let env' = add_var_dec i Tint true false { env with level = env.level + 1 } in
+    let env' = add_var_dec i Tint true false
+                             { env with level = env.level + 1 } in
     check_types_equal etype1 Tint (snd e1);
     check_types_equal etype2 Tint (snd e2);
     let (tsl, _) = type_stmt_list env' sl in
@@ -410,8 +429,6 @@ and type_stmt_list env sl =
 
 and type_file (ast : Ast.file) =
   let (env, tdl) = type_decl_list (empty_env ast.main_name) ast.glob_decl in
-  {
-    main_name = fst ast.main_name;
+  { main_name = fst ast.main_name;
     glob_decl = tdl;
-    stmts = fst (type_stmt_list env ast.stmts)
-  }
+    stmts = fst (type_stmt_list env ast.stmts) }

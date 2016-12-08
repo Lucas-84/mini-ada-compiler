@@ -1,11 +1,16 @@
-/* Syntaxic analyzer for Mini-Ada */
+/*
+ * Syntaxic analyzer for Mini-Ada
+ */
 
 %{
   open Ast
   open Lexing
-
+  
+  exception Different_idents of ident * loc
+  
   let check_same_identifiers (i1, _) o2 = match o2 with
-    | Some (i2, _) when String.lowercase i1 <> String.lowercase i2 -> failwith ("Two different identifiers")
+    | Some (i2, loc) when String.lowercase i1 <> String.lowercase i2 ->
+      raise Error
     | _ -> ()
 
   let dummy_loc =
@@ -72,17 +77,22 @@ decl:
   { Drecordtype (i, List.fold_left ( @ ) [] f), {fp = $startpos; lp = $endpos} }
 | i = separated_nonempty_list(COMMA, identifier); COLON; t = stype; SEMICOLON
   { Dident (i, t, None), {fp = $startpos; lp = $endpos} }
-| i = separated_nonempty_list(COMMA, identifier); COLON; t = stype; COLONEQ; e = expr; SEMICOLON
+| i = separated_nonempty_list(COMMA, identifier); COLON; t = stype; COLONEQ;
+  e = expr; SEMICOLON
   { Dident (i, t, Some e), {fp = $startpos; lp = $endpos} }
-| PROCEDURE; i1 = identifier; p = params?; IS; d = decl*; BEGIN; s = stmt+; END; o2 = identifier?; SEMICOLON
+| PROCEDURE; i1 = identifier; p = params?; IS; d = decl*; BEGIN; s = stmt+; END;
+  o2 = identifier?; SEMICOLON
   {
     check_same_identifiers i1 o2; 
-    Dfunction (i1, (match p with Some l -> l | None -> []), (STunit, dummy_loc), d, s), {fp = $startpos; lp = $endpos}
+    Dfunction (i1, (match p with Some l -> l | None -> []), 
+               (STunit, dummy_loc), d, s), {fp = $startpos; lp = $endpos}
   }
-| FUNCTION; i1 = identifier; p = params?; RETURN; t = stype; IS; d = decl*; BEGIN; s = stmt+; END; o2 = identifier?; SEMICOLON
+| FUNCTION; i1 = identifier; p = params?; RETURN; t = stype; IS; d = decl*;
+  BEGIN; s = stmt+; END; o2 = identifier?; SEMICOLON
   {
     check_same_identifiers i1 o2;
-    Dfunction (i1, (match p with Some l -> l | None -> []), t, d, s), {fp = $startpos; lp = $endpos}
+    Dfunction (i1, (match p with Some l -> l | None -> []), t, d, s),
+      {fp = $startpos; lp = $endpos}
   }
 ;
 
@@ -91,7 +101,8 @@ stmt:
   { Saccess (a, e), {fp = $startpos; lp = $endpos} }
 | i = identifier; SEMICOLON
   { Scall (i, []), {fp = $startpos; lp = $endpos} }
-| i = identifier; LPAR; e = separated_nonempty_list(COMMA, expr); RPAR; SEMICOLON
+| i = identifier; LPAR; e = separated_nonempty_list(COMMA, expr); RPAR;
+  SEMICOLON
   { Scall (i, e), {fp = $startpos; lp = $endpos} }
 | RETURN; e = expr?; SEMICOLON
   { Sreturn e, {fp = $startpos; lp = $endpos} }
@@ -99,8 +110,10 @@ stmt:
   { Sblock s, {fp = $startpos; lp = $endpos} }
 | IF; e = expr; THEN; s = stmt+; c = condition 
   { Sif (e, s, [c]), {fp = $startpos; lp = $endpos} }
-| FOR; i = identifier; IN; r = REVERSE?; e1 = expr; DOUBLEDOT; e2 = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
-  { Sfor (i, (match r with Some _ -> true | _ -> false), e1, e2, s), {fp = $startpos; lp = $endpos(e2)} }
+| FOR; i = identifier; IN; r = REVERSE?; e1 = expr; DOUBLEDOT; e2 = expr;
+  LOOP; s = stmt+; END; LOOP; SEMICOLON
+  { Sfor (i, (match r with Some _ -> true | _ -> false), e1, e2, s),
+    {fp = $startpos; lp = $endpos(e2)} }
 | WHILE; e = expr; LOOP; s = stmt+; END; LOOP; SEMICOLON
   { Swhile (e, s), {fp = $startpos; lp = $endpos} }
 ;
@@ -176,7 +189,6 @@ identifier:
 | i = IDENT
   { (i, {fp = $startpos; lp = $endpos}) }
 
-(* TODO: test precedence here *)
 mode:
 | IN; OUT
   { Minout }
@@ -194,4 +206,3 @@ access:
   { Aident i, {fp = $startpos; lp = $endpos} }
 | e = expr; DOT; i = identifier  
   { Arecord (e, i), {fp = $startpos; lp = $endpos} }
-

@@ -1,7 +1,11 @@
-(**
- * Abstract syntax tree of Mini Ada
+(*
+ * Abstract syntax trees of Mini Ada
  *)
 
+(*
+ * First AST: returned by parser and used by typer.
+ * Decorated using localization information
+ *)
 type loc = {
   fp : Lexing.position;
   lp : Lexing.position;
@@ -20,7 +24,8 @@ and decl =
   | Drecordtype of ident_loc * field list
   (* TODO: transform to ident * stype * expr option in parser *)
   | Dident of ident_loc list * stype_loc * expr_loc option
-  | Dfunction of ident_loc * param list * stype_loc * decl_loc list * stmt_loc list
+  | Dfunction of
+    ident_loc * param list * stype_loc * decl_loc list * stmt_loc list
 
 and field = ident_loc * stype_loc
 
@@ -83,3 +88,56 @@ and expr =
 
 and ident_loc = string * loc
 and ident = string
+
+(*
+ * Second AST
+ * Returned by typer
+ * Decorated with types
+ *)
+type tident = ident * int
+
+and typ =
+  Tint | Tchar | Tbool | Trecord of tident | Taccess of tident | Tnull | Tunit 
+
+and tfile = {
+  main_name : ident;
+  glob_decl : tdecl list;
+  stmts : tstmt list;
+}
+
+and tdecl =
+  | TDtype of ident
+  | TDaccesstype of ident * ident
+  | TDrecordtype of ident * tfield list
+  | TDident of ident list * typ * texpr option
+  | TDfunction of ident * tparam list * typ * tdecl list * tstmt list
+
+and tfield = ident * typ
+and tparam = ident * mode * typ
+
+and tstmt =
+  | TSaccess of taccess * texpr
+  | TScall of ident * texpr list
+  | TSreturn of texpr option
+  | TSblock of tstmt list
+  | TSif of texpr * tstmt list * tstmt list
+  | TSfor of ident * bool * texpr * texpr * tstmt list
+  | TSwhile of texpr * tstmt list
+
+and taccess =
+  | TAident of ident
+  | TArecord of texpr * ident
+
+and texpr = texpr_desc * typ
+and texpr_desc =
+  | TEint of int
+  | TEchar of char
+  | TEbool of bool
+  | TEnull
+  | TEaccess of taccess
+  | TEbinop of texpr * binop * texpr
+  | TEneg of texpr
+  | TEnew of ident
+  | TEcall of ident * texpr list
+  | TEcharval of texpr
+

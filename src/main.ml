@@ -1,8 +1,9 @@
-(* Mini Ada compiler *)
+(*
+ * Mini Ada compiler
+ *)
 open Parser
 open Lexing
-open Typing
-open Typed_ast
+open Typer
 open Ast
 
 let in_file = ref "" 
@@ -17,7 +18,9 @@ let report (b, e) =
 
 let () =
   Arg.parse ["--type-only", Arg.Unit (fun () -> type_only := true), "Type only";
-             "--parse-only", Arg.Unit (fun () -> parse_only := true), "Parse only"] (fun s -> in_file := s) "Mini Ada compiler";
+             "--parse-only", Arg.Unit (fun () ->
+               parse_only := true), "Parse only"]
+             (fun s -> in_file := s) "Mini Ada compiler";
   let in_chan = open_in !in_file in
   let buf = Lexing.from_channel in_chan in
   try
@@ -34,7 +37,7 @@ let () =
       exit 1
     | Parser.Error ->
       report (lexeme_start_p buf, lexeme_end_p buf);
-      Format.eprintf "\tsyntax error\n@." ;
+      Format.eprintf "\tsyntax error\n@.";
       exit 1
     | Reserved_ident (i, loc) ->
       report (loc.fp, loc.lp);
@@ -42,11 +45,15 @@ let () =
       exit 1
     | Typing_error (t1, t2, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\tthis expression has type %s but is expected to have type %s\n@." (string_of_typ t1) (string_of_typ t2);
+      Format.eprintf
+        "\tthis expression has type %s but is expected to have type %s\n@."
+        (string_of_typ t1) (string_of_typ t2);
       exit 1
     | Type_not_equal (t, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\tthis expression has type %s but is expected to have a different type\n@." (string_of_typ t);
+      Format.eprintf
+        "\tthis expression has type %s but is expected to have a different type\n@."
+        (string_of_typ t);
       exit 1
     | Unknown_member (i1, i2, loc) ->
       report (loc.fp, loc.lp);
@@ -66,7 +73,9 @@ let () =
       exit 1
     | Not_record (t, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\tthis expression has type %s but a record or an access type was expected\n@." (string_of_typ t);
+      Format.eprintf
+        "\tthis expression has type %s but a record or an access type was expected\n@."
+        (string_of_typ t);
       exit 1
     | Not_lvalue loc ->
       report (loc.fp, loc.lp);
@@ -94,12 +103,16 @@ let () =
       exit 1
     | Bad_access_type (i, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "\tmini-ada does not support access on non-record type such as %s\n" i;
+      Format.eprintf
+        "\tmini-ada does not support access on non-record type such as %s\n"
+        i;
       exit 1
     | Used_before_end (i, loc) ->
       report (loc.fp, loc.fp);
-      Format.eprintf "\tvariable %s is used before the end of its declaration\n" i;
+      Format.eprintf
+        "\tvariable %s is used before the end of its declaration\n"
+        i;
       exit 1
     | e ->
       Format.eprintf "Anomaly: %s\n@." (Printexc.to_string e);
-      exit 1
+      exit 2
