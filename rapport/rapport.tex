@@ -2,6 +2,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{listings}
+\usepackage[left=3cm,right=3cm,top=3cm,bottom=3cm]{geometry}
 \title{Rapport sur la première partie du projet de compilation}
 \author{Lucas \textsc{Pesenti}}
 \date{}
@@ -46,7 +47,7 @@
 \maketitle
 \paragraph*{}
 J'ai choisi d'implémenter le compilateur Mini Ada en OCaml, en utilisant les
-outils \texttt{ocamllex} et \texttt{menhir}. Le projet est pour le moment constitué de trois blocs : l'analyse lexicale --- \texttt{lexer.mll} ---, l'analyse syntaxique --- \texttt{parser.mly} --- et le typage --- \texttt{typer.ml}. Le fichier \texttt{ast.ml} définit les différents types d'arbres de syntaxe abstraite manipulés par les autres composants, \texttt{exceptions.ml} déclare les exceptions et \texttt{main.ml} coordonne le tout.
+outils \texttt{ocamllex} et \texttt{menhir}. Le projet est pour le moment constitué de trois blocs : l'analyse lexicale --- \texttt{lexer.mll} ---, l'analyse syntaxique --- \texttt{parser.mly} --- et le typage --- \texttt{typer.ml}. Le fichier \texttt{ast.ml} définit les différents types d'arbre de syntaxe abstraite manipulés par les autres composants, \texttt{exceptions.ml} déclare les exceptions et \texttt{main.ml} coordonne le tout. La compilation est assurée par \texttt{ocambuild}, qui est appelé par \texttt{make}.
 
 \section{Analyse lexicale}
 
@@ -54,11 +55,10 @@ outils \texttt{ocamllex} et \texttt{menhir}. Le projet est pour le moment consti
 Lors de la phase d'analyse lexicale, le fichier source est découpé en lexèmes, et les commentaires sont supprimés. Ceux-ci sont gérés dans une règle particulière \texttt{comment} qui commence avec les caractères \texttt{-{}-} et se termine à la fin de la ligne (ou du fichier).
 
 \paragraph*{}
-Tous les identificateurs sont transformés en minuscules. On a veillé à garder exactement la même liste de mots-clés que dans l'énoncé ; les cas de \texttt{character'val} et \texttt{Ada.Text\_IO} sont traités à part. Il a été choisi arbitrairement, comme ce n'était pas précisé dans l'énoncé, de laisser une flexibilité au niveau de la casse et les caractères blancs pour le premier, mais pas pour le second.
-
+Tous les identificateurs sont convertis en minuscules. On a veillé tout particulièrement à garder exactement la même liste de mots-clés que dans l'énoncé ; les cas de \texttt{character'val} et \texttt{Ada.Text\_IO} sont traités à part. Il a été choisi arbitrairement, comme ce n'était pas précisé dans l'énoncé, de laisser une flexibilité au niveau de la casse et des caractères blancs pour le premier, mais pas pour le second.
 
 \paragraph*{}
-Les littéraux caractères sont filtrés par \verb$['\x00' - \x7f']$. Enfin, on veille à n'accepter que les constantes numériques entre $0$ et $2^{31}$. On suppose pour cela --- quitte à limiter temporairement la portabilité --- que le compilateur est exécuté sur une architecture où un \texttt{int} permet effectivement de stocker cet intervalle de valeur\footnote{Ce n'est donc pas le cas d'un système 32 bits classique.}. On commence donc par vérifier que la valeur stockée par la chaîne est représentable dans un entier signé OCaml en utilisant  \texttt{int\_of\_string}, puis on effectue les vérifications nécessaires : 
+Les littéraux caractères sont filtrés par \verb$['\x00' - \x7f']$. Enfin, on veille à n'accepter que les constantes numériques entre $0$ et $2^{31}$. On suppose pour cela --- quitte à limiter temporairement la portabilité --- que le compilateur est exécuté sur une architecture où un \texttt{int} permet effectivement de stocker cet intervalle de valeur\footnote{Ce n'est donc pas le cas d'un système 32 bits classique. On aurait par exemple stocker un littéral entier positif $x$ par $-x$ afin de permettre artificiellement au compilateur de fonctionner correctement sur les machines en complément à 2 sur 32 bits.}. On commence donc par vérifier que la valeur stockée par la chaîne est représentable dans un entier signé OCaml en utilisant  \texttt{int\_of\_string}, puis on effectue les vérifications nécessaires : 
 
 \begin{lstlisting}
 try
@@ -75,7 +75,7 @@ with _ ->
 L'analyseur syntaxique renvoie un arbre de syntaxe abstraite décoré par des informations de localisation, à savoir les positions de début et de fin des lexèmes correspondants, fournies par l'analyseur lexical. Les différentes unités syntaxiques choisies pour représenter le langage sont :
 
 \begin{itemize}
-\item \texttt{file} : le programme complet ;
+\item \texttt{file} : un programme complet Mini Ada ;
 \item \texttt{decl} : une déclaration de type, de variable ou de fonction ;
 \item \texttt{field} : un champ d'enregistrement ;
 \item \texttt{stype} : une annotation de type ;
@@ -88,11 +88,13 @@ L'analyseur syntaxique renvoie un arbre de syntaxe abstraite décoré par des in
 \item \texttt{ident} : un identificateur.
 \end{itemize}
 
+\texttt{decl}, \texttt{stype}, \texttt{stmt}, \texttt{access}, \texttt{expr} et \texttt{ident} admettent une forme \texttt{nom\_loc} qui est en fait un alias de types pour \texttt{nom * loc}.
+
 \paragraph*{}
 Lors de cette phase, on regroupe le cas des fonctions et des procédures en considérant le type fictif \texttt{STunit}. On transforme également certaines listes : par exemple, on considère en sortie qu'un enregistrement est constitué d'une liste associant son type à chaque identificateur. De même, les constructions de \texttt{if ... elsif ... else} sont transformées en \texttt{if ... else} en utilisant des constructions de blocs.
 
 \paragraph*{}
-On effectue la vérification supplémentaire demandée à chaque déclaration de fonction ou de procédure qui se termine par un identificateur grâce à la fonciton \texttt{check\_same\_identifiers} :
+On effectue la vérification supplémentaire demandée pour chaque déclaration de fonction ou de procédure qui se termine par un identificateur grâce à la fonction \texttt{check\_same\_identifiers} :
 
 \begin{lstlisting}
 let check_same_identifiers (i1, _) o2 = match o2 with
@@ -105,15 +107,19 @@ let check_same_identifiers (i1, _) o2 = match o2 with
 \section{Typage}
 
 \paragraph*{}
-Le typeur prend en entrée l'arbre produit par l'analyseur syntaxique et renvoie un arbre de syntaxe abstraite décoré par les types, où \texttt{stype} est remplacé par \texttt{typ}. Les différents types considérés sont les suivants :
+Le typeur prend en entrée l'arbre produit par l'analyseur syntaxique et renvoie un arbre de syntaxe abstraite décoré par des types. De plus, toutes les références à des types annotés par l'utilisateur \texttt{stype} sont remplacées par \texttt{typ}. Les différents types considérés sont les suivants :
 
 \begin{lstlisting}
 type typ =
-  Tint | Tchar | Tbool | Trecord of tident | Taccess of tident | Tnull | Tunit 
+  | Tint | Tchar | Tbool           (* Types intrinseques *)
+  | Trecord of tident                  (* Enregistrement *)
+  | Taccess of tident                           (* Acces *)
+  | Tnull                                    (* typenull *)
+  | Tunit   (* Type fictif pour les retours de procedure *)
 \end{lstlisting}
 
 \paragraph*{}
-Le type \texttt{tident} auquel la définition précédente fait référence est la donnée du nom à proprement dit et d'un entier, son niveau de déclaration (la profondeur d'imbrication de la fonction dans laquelle il est déclaré). Ceci permet d'identifier de manière unique un identificateur dans l'état courant du typeur, en prenant en compte la possibilité qu'il existe en même temps plusieurs noms faisant référence à des objets différents (masquage).
+Le type \texttt{tident} auquel la définition précédente fait référence est la donnée du nom à proprement dit et d'un entier, son niveau de déclaration (la profondeur d'imbrication de la fonction dans laquelle il est déclaré). Ceci permet de caractériser de manière unique un identificateur dans l'environnement courant du typage, en prenant en compte la possibilité que subsistent en même temps plusieurs noms faisant référence à des objets différents (masquage).
 
 \paragraph*{}
 L'environnement de typage est stocké avec les informations suivantes.
@@ -126,20 +132,54 @@ L'environnement de typage est stocké avec les informations suivantes.
 \item \texttt{for\_vars} : ensemble des compteurs de boucle \texttt{for}. Il est utilisé pour détecter les cas erronés comme \texttt{for i in 1 .. i}. 
 \item \texttt{idents} : associe à chaque identificateur un type de dernière déclaration (parmi déclaration de variable, déclaration de variable de type, définition de structure et définition de fonction) et le niveau de cette déclaration.
 \item \texttt{return\_value} : type de retour de la fonction courante (si cela a un sens).
-\item \texttt{level} : niveau d'imbrication courant.
+\item \texttt{level} : niveau d'imbrication courant. 
 \item \texttt{nb\_incomplete} : nombre de déclarations incomplètes (ie. non suivies d'une définition).
 \end{itemize}
 
 \paragraph*{}
-Des environnements fictifs sont régulièrement créés, de manière à simuler correctemet le masquage des identificateurs, par exemple quand un identificateur de champ ou de variable masque son type lors de sa déclaration. Il est donc fait intensément usage de la non mutabilité des tableaux associatifs en OCaml. 
+Des environnements fictifs sont régulièrement créés, de manière à simuler correctement le masquage des identificateurs, par exemple quand un identificateur de champ ou de variable masque son type lors de sa déclaration. À titre d'exemple, l'ajout d'un identificateur se déroule de la manière suivante :
+
+\begin{lstlisting}
+(*
+ * Ajoute dans idents un identificateur (i, loc) dont la
+ * declaration est de type dec_type dans le niveau level.
+ *)
+let add_ident (i, loc) dec_typ level idents =
+  try  
+    (* S'il n'existe pas, on l'ajoute *)
+    let (prev_dec_typ, prev_level) = Smap.find i idents in
+    (* Si i est dans la liste des identificateurs
+       reserves (put et new_line) *)
+    if List.mem i reserved_idents then
+      raise (Reserved_ident (i, loc))
+    (* Si il y a un masquage strict, on ajoute *)
+    else if prev_level < level then
+      raise Not_found 
+    (* Si c'est une structure declaree puis definie, on
+       ajoute *)
+    else if prev_dec_typ = Dtyp_typ_dec &&
+            dec_typ = Dtyp_rec_def then
+      raise Not_found
+    (* Sinon, ca fait deux identificateurs de meme nom au
+       meme niveau *)
+    else
+      raise (Already_declared (i, loc))
+  with Not_found ->
+     Smap.add i (dec_typ, level) idents
+\end{lstlisting}
+
+Il est donc fait intensément usage de la non mutabilité des tableaux associatifs --- module \texttt{Map} de Ocaml.
 
 \paragraph*{}
-Le typeur supporte la totalité de Mini Ada, mais est construit dans l'optique d'une généralisation à Ada. Par exemple, on pourrait rajouter sans trop de difficulté le support de types \texttt{access} sur des types plus généraux que des enregistrements, ou encore des déclaration anticipées de types \texttt{access}. Cependant, des vérifications supplémentaires sont faites, 
+Le typeur supporte la totalité de Mini Ada, mais est construit dans l'optique d'une généralisation à Ada. Par exemple, on pourrait rajouter sans trop de difficulté le support de types \texttt{access} sur des types plus généraux que des enregistrements, ou encore des déclaration anticipées de types \texttt{access}. 
 
 \paragraph*{}
-La règle selon laquelle toute fonction doit se terminer par un \texttt{return} m'a également semblé assez agressive par rapport à ce qu'Ada autorise. De nombreuses questions se posent quant au suivi du flot de contrôle, par exemple lorsque la fonction se termine par une boucle ou une condition. Ainsi, dans le cas où les deux blocs d'instructions suivant \texttt{if} et \texttt{else} se terminent par un \texttt{return}, le compilateur ne produit pas d'erreur.
+Conformément au comportement d'Ada, deux types enregistrements ne sont considérés comme identiques --- et sont donc compatibles, au sens des opérations qu'on leur applique --- que s'ils correspondent à la même déclaration --- et pas s'ils contiennent les mêmes champs, par exemple.
 
 \paragraph*{}
-La description des erreurs gagnerait à être encore plus précise : en particulier, l'exception \texttt{Undeclared} est utilisée même lorsque l'erreur est en réalité causée par un masquage, ce qui n'est pas le comportement des compilateurs courants.
+La règle selon laquelle toute fonction doit se terminer par un \texttt{return} m'a semblé assez agressive par rapport à ce qu'Ada autorise. De nombreuses questions se posent quant au suivi du flot de contrôle, par exemple lorsque la fonction se termine par une boucle ou une condition. Ainsi, dans le cas où tous les blocs d'instructions suivant \texttt{if .. elsif .. else} se terminent par un \texttt{return}, le compilateur ne produit pas d'erreur.
+
+\paragraph*{}
+La description des erreurs gagnerait à être encore plus précise : en particulier, l'exception \texttt{Undeclared} est utilisée même lorsque l'erreur est en réalité causée par un masquage, ce qui n'est pas le comportement des compilateurs courants. De plus, certaines informations sont perdues dès les premières étapes de l'analyse du compilateur : par exemple, la casse des identificateurs dans les exceptions ne correspond pas nécessairement à celle utilisée dans le programme\footnote{Une amélioration consisterait donc à représenter un identificateur dans l'arbre de syntaxe abstraite en sortie de l'analyseur syntaxique comme un triplet : son nom, son nom en minuscules et sa localisation. Le précalcul du deuxième élément permet de réduire le coût d'une conversion en minuscules à chaque utilisation du nom dans le typeur.}.
 
 \end{document}
