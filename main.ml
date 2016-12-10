@@ -5,6 +5,7 @@ open Parser
 open Lexing
 open Typer
 open Ast
+open Exceptions
 
 let in_file = ref "" 
 let type_only = ref false
@@ -21,7 +22,15 @@ let () =
              "--parse-only", Arg.Unit (fun () ->
                parse_only := true), "Parse only"]
              (fun s -> in_file := s) "Mini Ada compiler";
-  let in_chan = open_in !in_file in
+  let in_chan = 
+    try 
+      open_in !in_file
+    with Sys_error s ->
+      begin
+      	Format.eprintf "Fatal error\n%s\n@." s;
+      	exit 2
+      end
+  in
   let buf = Lexing.from_channel in_chan in
   try
     let ast = Parser.file Lexer.token buf in
@@ -33,11 +42,15 @@ let () =
   with 
     | Lexer.Lexing_error s ->
       report (lexeme_start_p buf, lexeme_end_p buf); 
-      Format.eprintf "\tlexical error: %s\n@." s;
+      Format.eprintf "lexical error: %s\n@." s;
       exit 1
     | Parser.Error ->
       report (lexeme_start_p buf, lexeme_end_p buf);
-      Format.eprintf "\tsyntax error\n@.";
+      Format.eprintf "syntax error\n@.";
+      exit 1
+    | Different_idents (i, loc) ->
+      report (loc.fp, loc.lp);
+      Format.eprintf "%s is not the expected identifier\n" i;
       exit 1
     | Reserved_ident (i, loc) ->
       report (loc.fp, loc.lp);

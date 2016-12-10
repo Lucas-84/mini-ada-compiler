@@ -3,14 +3,13 @@
  */
 
 %{
+  open Exceptions
   open Ast
   open Lexing
   
-  exception Different_idents of ident * loc
-  
   let check_same_identifiers (i1, _) o2 = match o2 with
     | Some (i2, loc) when String.lowercase i1 <> String.lowercase i2 ->
-      raise Error
+      raise (Different_idents (i2, loc))
     | _ -> ()
 
   let dummy_loc =

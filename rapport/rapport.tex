@@ -1,41 +1,145 @@
 \documentclass[a4paper,12pt]{article}
-\title{Rapport --- premiere partie du projet de compilation}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\title{Rapport sur la première partie du projet de compilation}
 \author{Lucas \textsc{Pesenti}}
-\begin{document}
 \date{}
 
+\usepackage{listings}
+\usepackage{color}
+
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mymauve}{rgb}{0.58,0,0.82}
+
+\lstset{ %
+  backgroundcolor=\color{white},   % choose the background color; you must add \usepackage{color} or \usepackage{xcolor}; should come as last argument
+  basicstyle=\ttfamily\footnotesize,        % the size of the fonts that are used for the code
+  breakatwhitespace=false,         % sets if automatic breaks should only happen at whitespace
+  breaklines=true,                 % sets automatic line breaking
+  captionpos=b,                    % sets the caption-position to bottom
+  commentstyle=\color{mygreen},    % comment style
+  deletekeywords={...},            % if you want to delete keywords from the given language
+  escapeinside={\%*}{*)},          % if you want to add LaTeX within your code
+  extendedchars=true,              % lets you use non-ASCII characters; for 8-bits encodings only, does not work with UTF-8
+  frame=single,	                   % adds a frame around the code
+  keepspaces=true,                 % keeps spaces in text, useful for keeping indentation of code (possibly needs columns=flexible)
+  keywordstyle=\color{blue},       % keyword style
+  language=caml,                   % the language of the code
+  morekeywords={*,...},            % if you want to add more keywords to the set
+  numbers=left,                    % where to put the line-numbers; possible values are (none, left, right)
+  numbersep=5pt,                   % how far the line-numbers are from the code
+  numberstyle=\tiny\color{mygray}, % the style that is used for the line-numbers
+  rulecolor=\color{black},         % if not set, the frame-color may be changed on line-breaks within not-black text (e.g. comments (green here))
+  showspaces=false,                % show spaces everywhere adding particular underscores; it overrides 'showstringspaces'
+  showstringspaces=false,          % underline spaces within strings only
+  showtabs=false,                  % show tabs within strings adding particular underscores
+  stepnumber=1,                    % the step between two line-numbers. If it's 1, each line will be numbered
+  stringstyle=\color{mymauve},     % string literal style
+  tabsize=2,	                   % sets default tabsize to 2 spaces
+  title=\lstname                   % show the filename of files included with \lstinputlisting; also try caption instead of title
+}
+
+\begin{document}
+
 \maketitle
+\paragraph*{}
+J'ai choisi d'implémenter le compilateur Mini Ada en OCaml, en utilisant les
+outils \texttt{ocamllex} et \texttt{menhir}. Le projet est pour le moment constitué de trois blocs : l'analyse lexicale --- \texttt{lexer.mll} ---, l'analyse syntaxique --- \texttt{parser.mly} --- et le typage --- \texttt{typer.ml}. Le fichier \texttt{ast.ml} définit les différents types d'arbres de syntaxe abstraite manipulés par les autres composants, \texttt{exceptions.ml} déclare les exceptions et \texttt{main.ml} coordonne le tout.
+
+\section{Analyse lexicale}
+
+\paragraph*{}
+Lors de la phase d'analyse lexicale, le fichier source est découpé en lexèmes, et les commentaires sont supprimés. Ceux-ci sont gérés dans une règle particulière \texttt{comment} qui commence avec les caractères \texttt{-{}-} et se termine à la fin de la ligne (ou du fichier).
+
+\paragraph*{}
+Tous les identificateurs sont transformés en minuscules. On a veillé à garder exactement la même liste de mots-clés que dans l'énoncé ; les cas de \texttt{character'val} et \texttt{Ada.Text\_IO} sont traités à part. Il a été choisi arbitrairement, comme ce n'était pas précisé dans l'énoncé, de laisser une flexibilité au niveau de la casse et les caractères blancs pour le premier, mais pas pour le second.
+
+
+\paragraph*{}
+Les littéraux caractères sont filtrés par \verb$['\x00' - \x7f']$. Enfin, on veille à n'accepter que les constantes numériques entre $0$ et $2^{31}$. On suppose pour cela --- quitte à limiter temporairement la portabilité --- que le compilateur est exécuté sur une architecture où un \texttt{int} permet effectivement de stocker cet intervalle de valeur\footnote{Ce n'est donc pas le cas d'un système 32 bits classique.}. On commence donc par vérifier que la valeur stockée par la chaîne est représentable dans un entier signé OCaml en utilisant  \texttt{int\_of\_string}, puis on effectue les vérifications nécessaires : 
+
+\begin{lstlisting}
+try
+  let n = int_of_string s in
+  if n > 1 lsl 31 then failwith "";
+  INT n
+with _ -> 
+  raise (Lexing_error ("too big integer constant " ^ s))
+\end{lstlisting}
+
+\section{Analyse syntaxique}
+
+\paragraph*{}
+L'analyseur syntaxique renvoie un arbre de syntaxe abstraite décoré par des informations de localisation, à savoir les positions de début et de fin des lexèmes correspondants, fournies par l'analyseur lexical. Les différentes unités syntaxiques choisies pour représenter le langage sont :
+
 \begin{itemize}
-\item Idee generale : OCaml, Ocamllex, Menhir
-\item Description des fichiers et leur significaion :
+\item \texttt{file} : le programme complet ;
+\item \texttt{decl} : une déclaration de type, de variable ou de fonction ;
+\item \texttt{field} : un champ d'enregistrement ;
+\item \texttt{stype} : une annotation de type ;
+\item \texttt{param} : un paramètre de fonction ou de procédure ;
+\item \texttt{mode} ;
+\item \texttt{stmt} : une instruction ;
+\item \texttt{access} : un accès à une variable ;
+\item \texttt{binop} : un opérateur binaire ;
+\item \texttt{expr} : une expression ;
+\item \texttt{ident} : un identificateur.
+\end{itemize}
+
+\paragraph*{}
+Lors de cette phase, on regroupe le cas des fonctions et des procédures en considérant le type fictif \texttt{STunit}. On transforme également certaines listes : par exemple, on considère en sortie qu'un enregistrement est constitué d'une liste associant son type à chaque identificateur. De même, les constructions de \texttt{if ... elsif ... else} sont transformées en \texttt{if ... else} en utilisant des constructions de blocs.
+
+\paragraph*{}
+On effectue la vérification supplémentaire demandée à chaque déclaration de fonction ou de procédure qui se termine par un identificateur grâce à la fonciton \texttt{check\_same\_identifiers} :
+
+\begin{lstlisting}
+let check_same_identifiers (i1, _) o2 = match o2 with
+  | Some (i2, loc) when String.lowercase i1 <> 
+                        String.lowercase i2 ->
+    raise (Different_idents (i2, loc))
+  | _ -> ()
+\end{lstlisting}
+
+\section{Typage}
+
+\paragraph*{}
+Le typeur prend en entrée l'arbre produit par l'analyseur syntaxique et renvoie un arbre de syntaxe abstraite décoré par les types, où \texttt{stype} est remplacé par \texttt{typ}. Les différents types considérés sont les suivants :
+
+\begin{lstlisting}
+type typ =
+  Tint | Tchar | Tbool | Trecord of tident | Taccess of tident | Tnull | Tunit 
+\end{lstlisting}
+
+\paragraph*{}
+Le type \texttt{tident} auquel la définition précédente fait référence est la donnée du nom à proprement dit et d'un entier, son niveau de déclaration (la profondeur d'imbrication de la fonction dans laquelle il est déclaré). Ceci permet d'identifier de manière unique un identificateur dans l'état courant du typeur, en prenant en compte la possibilité qu'il existe en même temps plusieurs noms faisant référence à des objets différents (masquage).
+
+\paragraph*{}
+L'environnement de typage est stocké avec les informations suivantes.
 \begin{itemize}
-\item main.ml : gestion generale et affichage des exceptions
-\item ast.ml : arbres de syntaxe abstraites manipules par les autres composants
-\item lexer.mll : lexer pour Ocamllex
-\item parser.mly : parser pour Menhir
-\item typer.ml : typeur
+\item \texttt{dec\_vars} : associe à chaque variable declarée dans l'environnement courant son type.
+\item \texttt{dec\_typs} : associe à chaque variable de type declarée le type qu'elle dénote. S'il n'y a pas de declaration anticipée, les structures sont automatiquement délarées lorsqu'elles sont définies. Les types intrinsèques comme \texttt{int}, \texttt{character} ou \texttt{boolean} sont également gérés de cette manière.
+\item \texttt{def\_recs} : associe à chaque variable de type enregistrement définie une table associative qui relie chaque identificateur de champ à son type.
+\item \texttt{def\_funs} : associe à chaque fonction définie son type de retour (éventuellement \texttt{Tunit} pour une procédure), la liste du type et du mode de chacun de ses arguments.
+\item \texttt{const\_vars} : variables constantes. Une expression formée à partir d'une d'entre elles n'est pas une lvalue. Cela concerne les paramètres \texttt{In} et les compteurs de boucle \texttt{for}.
+\item \texttt{for\_vars} : ensemble des compteurs de boucle \texttt{for}. Il est utilisé pour détecter les cas erronés comme \texttt{for i in 1 .. i}. 
+\item \texttt{idents} : associe à chaque identificateur un type de dernière déclaration (parmi déclaration de variable, déclaration de variable de type, définition de structure et définition de fonction) et le niveau de cette déclaration.
+\item \texttt{return\_value} : type de retour de la fonction courante (si cela a un sens).
+\item \texttt{level} : niveau d'imbrication courant.
+\item \texttt{nb\_incomplete} : nombre de déclarations incomplètes (ie. non suivies d'une définition).
 \end{itemize}
-\begin{itemize}
-\item une variable de type est representee par un identificateur et un niveau de declaration (gestion des masquages). Ce n'est pas necessaire pour une variable classique, caracterisee par son identificateur (idem pour les identificateurs de fonction)
-\item un type = int ou char ou bool ou record ident ou access ident ou null ou unit (utilise uniquement de maniere interne au compilateur, pour gerer de maniere generique fonctions et procedures ("void" peut aussi apparaitre dans les messages d'erreur)
-\end{itemize}
-\item representation de l'environnement :
-\begin{itemize}
-\item dec\_vars : associe a chaque variable declaree dans l'environnement courant son type
-\item dec\_typs : associe a chaque variable de type declaree le type qu'elle denote. Si il n'y a pas de declaration anticipee, les structures sont declarees quand elles sont definies. Les types builtin comme int, character ou boolean restent egalement dans l'environnement
-\item def\_recs : associe a chaque variable de type structure definie une map qui associe a chaque identificateur de champ son type
-\item def\_funs : associe a chaque fonction definie son type de retour (eventuellement unit pour une procedure), la liste du type et du mode de chacun de ses arguments
-\item const\_vars : variables constantes. Une expression formee a partir d'elle n'est jamais une lvalue. Concerne les parametres In et les compteurs de boucle for.
-\item for\_vars : ensemble des compteurs de boucle for. Utilise pour gerer le cas suivant :
-\item idents : associe a chaque identificateur un type de derniere declaration (parmi declaration de variable, declaration de variable de type, definition de structure et definition de fonction) et le niveau de cette declaration
-\item return\_value : type de retour de la fonction courante (si cela a un sens)
-\item level : niveau d'imbrication courant
-\item nb\_incomplete : nombre de declarations incompletes (ie. non suivies d'une definition)
-\end{itemize}
-\item apports par rapport a Mini-Ada : pas beaucoup, des verifications supplementaires par rapport a Ada (par exemple, il est facile de rajouter le support de pointeurs vers des choses autres que des structures, des declarations anticipes de types access, etc.) mais ils produisent normalement une erreur.
-\item description de ce qui se passe quand on ajoute une variable, un type, etc.
-\item remarques sur le masquage
-\item gestion de character'val, des constantes entieres et de use ...
-\item cas de return agressif
-\end{itemize}
+
+\paragraph*{}
+Des environnements fictifs sont régulièrement créés, de manière à simuler correctemet le masquage des identificateurs, par exemple quand un identificateur de champ ou de variable masque son type lors de sa déclaration. Il est donc fait intensément usage de la non mutabilité des tableaux associatifs en OCaml. 
+
+\paragraph*{}
+Le typeur supporte la totalité de Mini Ada, mais est construit dans l'optique d'une généralisation à Ada. Par exemple, on pourrait rajouter sans trop de difficulté le support de types \texttt{access} sur des types plus généraux que des enregistrements, ou encore des déclaration anticipées de types \texttt{access}. Cependant, des vérifications supplémentaires sont faites, 
+
+\paragraph*{}
+La règle selon laquelle toute fonction doit se terminer par un \texttt{return} m'a également semblé assez agressive par rapport à ce qu'Ada autorise. De nombreuses questions se posent quant au suivi du flot de contrôle, par exemple lorsque la fonction se termine par une boucle ou une condition. Ainsi, dans le cas où les deux blocs d'instructions suivant \texttt{if} et \texttt{else} se terminent par un \texttt{return}, le compilateur ne produit pas d'erreur.
+
+\paragraph*{}
+La description des erreurs gagnerait à être encore plus précise : en particulier, l'exception \texttt{Undeclared} est utilisée même lorsque l'erreur est en réalité causée par un masquage, ce qui n'est pas le comportement des compilateurs courants.
+
 \end{document}

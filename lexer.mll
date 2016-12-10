@@ -43,8 +43,9 @@ let ident = alpha (alpha | digit | '_')*
 let space = [' ' '\n' '\t']
 let charval = alpha alpha+ space* '\'' space* alpha alpha+
 let integer = digit+
-let character = '\'' _ '\'' 
-let stdlib = "Ada.Text_IO" (* Handle spaces *)
+let character = '\'' ['\x00' - '\x7f'] '\'' 
+(* Do not handle spaces yet *)
+let stdlib = "Ada.Text_IO"
 
 rule token = parse
 | space as c        { if c = '\n' then new_line lexbuf; token lexbuf }
@@ -57,7 +58,7 @@ rule token = parse
 | stdlib            { STDLIB } 
 | ident as s        { token_of_ident s }
 | integer as s      { try
-                        let n = (int_of_string s) in if n > 1 lsl 31 then
+                        let n = int_of_string s in if n > 1 lsl 31 then
                         failwith ""; INT n
                       with _ ->
                         raise (Lexing_error ("too big integer constant " ^ s)) }

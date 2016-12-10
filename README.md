@@ -1,3 +1,30 @@
-# mini-ada-compiler
+# Mini Ada compiler
 
-https://www.lri.fr/~filliatr/ens/compil/projet/sujet-v2.pdf
+## Usage
+
+To compile:
+
+````
+	make
+````
+
+To execute:
+
+````
+	./ada file.adb
+````
+
+To clean the repository:
+
+````
+	make clean
+````
+
+## Files
+
+ - main.ml : main source file.
+ - exceptions.ml : exception definitions.
+ - ast.ml : abstract syntax trees definitions.
+ - lexer.mll : lexer (ocamllex)
+ - parser.mly : parser (menhir)
+ - rapport/rapport.pdf : PDF report
