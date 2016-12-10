@@ -5,19 +5,19 @@
 To compile:
 
 ````
-	make
+make
 ````
 
 To execute:
 
 ````
-	./ada file.adb
+./ada file.adb
 ````
 
 To clean the repository:
 
 ````
-	make clean
+make clean
 ````
 
 ## Files
