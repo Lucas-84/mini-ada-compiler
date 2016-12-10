@@ -50,7 +50,7 @@ let () =
       exit 1
     | Different_idents (i, loc) ->
       report (loc.fp, loc.lp);
-      Format.eprintf "%s is not the expected identifier\n" i;
+      Format.eprintf "%s is not the expected identifier\n@." i;
       exit 1
     | Reserved_ident (i, loc) ->
       report (loc.fp, loc.lp);
@@ -123,7 +123,7 @@ let () =
     | Used_before_end (i, loc) ->
       report (loc.fp, loc.fp);
       Format.eprintf
-        "variable %s is used before the end of its declaration\n"
+        "variable %s is used before the end of its declaration\n@."
         i;
       exit 1
     | e ->
