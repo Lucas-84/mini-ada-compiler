@@ -23,7 +23,7 @@ and decl =
   | Dtype of ident_loc
   | Daccesstype of ident_loc * ident_loc
   | Drecordtype of ident_loc * field list
-  | Dident of ident_loc list * stype_loc * expr_loc option
+  | Dident of ident_loc * stype_loc * expr_loc option
   | Dfunction of
     ident_loc * param list * stype_loc * decl_loc list * stmt_loc list
 
@@ -109,7 +109,7 @@ and tdecl =
   | TDtype of ident
   | TDaccesstype of ident * ident
   | TDrecordtype of ident * tfield list
-  | TDident of ident list * typ * texpr option
+  | TDident of ident * typ * texpr option
   | TDfunction of ident * tparam list * typ * tdecl list * tstmt list
 
 and tfield = ident * typ
@@ -117,7 +117,7 @@ and tparam = ident * mode * typ
 
 and tstmt =
   | TSaccess of taccess * texpr
-  | TScall of ident * texpr list
+  | TScall of tident * texpr list
   | TSreturn of texpr option
   | TSblock of tstmt list
   | TSif of texpr * tstmt list * tstmt list
@@ -125,7 +125,7 @@ and tstmt =
   | TSwhile of texpr * tstmt list
 
 and taccess =
-  | TAident of ident
+  | TAident of tident
   | TArecord of texpr * ident
 
 and texpr = texpr_desc * typ
@@ -137,6 +137,6 @@ and texpr_desc =
   | TEaccess of taccess
   | TEbinop of texpr * binop * texpr
   | TEneg of texpr
-  | TEnew of ident
-  | TEcall of ident * texpr list
+  | TEnew of tident
+  | TEcall of tident * texpr list
   | TEcharval of texpr

@@ -4,6 +4,7 @@
 open Parser
 open Lexing
 open Typer
+open Compiler
 open Ast
 open Exceptions
 
@@ -17,14 +18,30 @@ let report (b, e) =
   let lc = e.pos_cnum - b.pos_bol + 1 in
   Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" !in_file l fc lc
 
+let get_extension () =
+  String.sub !in_file (String.length !in_file - 4) 4
+  
+let get_assembly_file () =
+  String.sub !in_file 0 (String.length !in_file - 4) ^ ".s"
+
 let () =
   Arg.parse ["--type-only", Arg.Unit (fun () -> type_only := true), "Type only";
              "--parse-only", Arg.Unit (fun () ->
                parse_only := true), "Parse only"]
              (fun s -> in_file := s) "Mini Ada compiler";
+  begin try
+    if get_extension () <> ".adb" then
+      raise (Invalid_argument "")
+  with Invalid_argument _ ->
+    begin
+      Format.eprintf "The input file %s has a wrong extension\n@." !in_file;
+      exit 2
+    end
+  end;
   let in_chan = 
     try 
-      open_in !in_file
+      let ans = open_in !in_file in
+      ans
     with Sys_error s ->
       begin
         Format.eprintf "Fatal error\n%s\n@." s;
@@ -35,8 +52,11 @@ let () =
   try
     let ast = Parser.file Lexer.token buf in
     if not !parse_only then begin
-      let _ = type_file ast in
-      ()
+      let tast = type_file ast in
+      if not !type_only then begin
+        let prog = compile_prog tast in
+        X86_64.print_in_file (get_assembly_file ()) prog
+      end
     end;
     close_in in_chan
   with 
