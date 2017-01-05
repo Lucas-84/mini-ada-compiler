@@ -208,6 +208,7 @@ val imulw: [`W] operand -> [`W] operand -> text
 val imull: [`L] operand -> [`L] operand -> text
 val imulq: [`Q] operand -> [`Q] operand -> text
 
+val idivl: [`L] operand -> text
 val idivq: [`Q] operand -> text
 val cqto: text
 

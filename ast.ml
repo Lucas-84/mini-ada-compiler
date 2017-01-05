@@ -82,6 +82,7 @@ and expr =
   | Eaccess of access_loc
   | Ebinop of expr_loc * binop * expr_loc
   | Eneg of expr_loc
+  | Eminus of expr_loc
   | Enew of ident_loc
   | Ecall of ident_loc * expr_loc list
   | Echarval of expr_loc
@@ -137,6 +138,7 @@ and texpr_desc =
   | TEaccess of taccess
   | TEbinop of texpr * binop * texpr
   | TEneg of texpr
+  | TEminus of texpr
   | TEnew of tident
   | TEcall of tident * texpr list
   | TEcharval of texpr

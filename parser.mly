@@ -149,7 +149,7 @@ expr:
 | NOT; e = expr
   { Eneg e, {fp = $startpos; lp = $endpos} }
 | SUB; e = expr %prec minus
-  { Ebinop ((Eint 0, dummy_loc), Bsub, e), {fp = $startpos; lp = $endpos} }
+  { Eminus e, {fp = $startpos; lp = $endpos} }
 | NEW; i = identifier 
   { Enew i, {fp = $startpos; lp = $endpos} }
 | i = identifier; LPAR; e = separated_nonempty_list(COMMA, expr); RPAR

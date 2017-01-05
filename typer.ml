@@ -276,6 +276,10 @@ and type_expr env (e, loc) = match e with
     let (_, etype) as et = type_expr env e in
     if etype <> Tbool then raise (Typing_error (etype, Tbool, snd e))
     else (TEneg et, Tbool)
+  | Eminus e ->
+     let (_, etype) as et = type_expr env e in
+     if etype <> Tint then raise (Typing_error (etype, Tint, snd e))
+     else (TEminus et, Tint)
   | Enew i ->
     check_is_declared i env;
     let level = level_of_ident i env in
