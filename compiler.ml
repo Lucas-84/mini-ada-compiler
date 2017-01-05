@@ -9,17 +9,20 @@ type env = {
   (* variable identifier -> (level, offset) in the current context *)
   vars: (int * int) Smap.t;
   (* Current level *)
-  level: int
+  lvl: int;
+  (* Current offset *)
+  ofs: int
 }
 
 (* Return a new empty environment *)
 let empty_env =
   { vars = Smap.empty;
-    level = 0 }
+    ofs = 0;
+    lvl = 0 }
 
 (* Return the label associated to an identifier (given its level) *)
-let label_of_identifier (is, level) =
-  "_" ^ (string_of_int level) ^ is
+let label_of_identifier (is, lvl) =
+  "_" ^ (string_of_int lvl) ^ is
 
 (* Return a fresh identifier for a new label *)
 let new_label =
@@ -41,14 +44,54 @@ let compute_stack_size_decls dl =
 (* Compute stack size needed by a statement list *)
 let rec compute_stack_size_stmt s = match s with
   | TSblock sl -> compute_stack_size_stmts sl
-  | TSif (_, sl1, sl2) -> max (compute_stack_size_stmts sl1) (compute_stack_size_stmts sl2)
+  | TSif (_, sl1, sl2) -> max (compute_stack_size_stmts sl1)
+                              (compute_stack_size_stmts sl2)
   | TSfor (_, _, _, _, sl) -> 8 + compute_stack_size_stmts sl
   | _ -> 0
 and compute_stack_size_stmts sl =
   List.fold_left max 0 (List.map compute_stack_size_stmt sl)
 
+(* Compile a declaration *)
+let rec compile_decl env d = match d with
+  | TDident (i, t, s) ->
+    let ofs = env.ofs in
+    let env = { env with vars = Smap.add i (env.lvl, ofs - 8) env.vars;
+                ofs = ofs - 8 } in
+    begin match s with
+      | Some e ->
+        compile_expr env e ++
+        popq rdi ++
+        movq (reg rdi) (ind ~ofs:env.ofs rbp)
+      | None -> nop 
+    end, nop, env
+  | TDfunction (i, pl, rt, dl, sl) ->
+    let env = { env with vars = fst (List.fold_right
+      (fun (i, _, _) (vars, ofs) -> Smap.add i (env.lvl, ofs) vars, ofs + 8)
+      pl (env.vars, 16)) } in
+    let stacksz = compute_stack_size_decls dl + compute_stack_size_stmts sl in
+    let code_inside, code_after, env' =
+      compile_decls { env with ofs = 0; lvl = env.lvl + 1 } dl in
+    nop, label (label_of_identifier (i, env.lvl)) ++ 
+    pushq (reg rbp) ++
+    movq (reg rsp) (reg rbp) ++
+    pushn stacksz ++
+    code_inside ++
+    comment "fin du code inside" ++
+    compile_stmts env' sl ++
+    popn stacksz ++
+    popq rbp ++
+    ret ++ code_after, env
+  | _ ->
+    assert false
+    
+and compile_decls env dl =
+  List.fold_left (fun (code1, code2, env) d ->
+    let code1', code2', env' = compile_decl env d in 
+      code1 ++ code1', code2 ++ code2', env')
+    (nop, nop, env) dl
+
 (* Compile an expression *)
-let rec compile_expr env (e, _) = match e with
+and compile_expr env (e, _) = match e with
   | TEint x ->
     pushq (imm x)
   | TEchar c ->
@@ -60,30 +103,43 @@ let rec compile_expr env (e, _) = match e with
   | TEbinop (e1, o, e2) ->
     compile_expr env e1 ++
     compile_expr env e2 ++
-    (* todo: check order *)
-    popq rax ++
+    (* suppose higher bits of rax=0 *)
     popq rcx ++
+    popq rax ++
     begin match o with
-    (* b --> q? *)
-    (*
-      | Beq -> cmpq (reg rax) (reg rcx) ++ sete (reg rcx)
-      | Bneq -> cmpq rax rcx ++ setne rcx
-      | Blt -> cmpq rax rcx ++ setl rcx
-      | Ble -> cmpq rax rcx ++ setle rcx
-      | Bgt -> cmpq rax rcx ++ setg rcx
-      | Bge -> cmpq rax rcx ++ setge rcx
-    *)
-      (* 32 bits? *)
-      | Badd -> addq (reg rax) (reg rcx)
-      | Bsub -> subq (reg rax) (reg rcx)
-      | _ -> assert false ++
-    pushq (reg rcx)
-    end
+      | Beq  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ sete (reg al)
+      | Bneq -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setne (reg al) 
+      | Blt  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setl (reg al)
+      | Ble  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setle (reg al)
+      | Bgt  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setg (reg al)
+      | Bge  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setge (reg al)
+
+      | Badd -> addq (reg rcx) (reg rax)
+      | Bsub -> subq (reg rcx) (reg rax)
+      | Brem ->
+          cqto ++
+          idivq (reg rcx) ++
+          movq (reg rdx) (reg rax)
+      | Bdiv ->
+          cqto ++
+          movq (imm 0) (reg rdx) ++
+          idivq (reg rcx)
+      | Bmul ->
+          imulq (reg rcx) (reg rax)
+      | _ -> assert false
+    end ++
+    pushq (reg rax)
+  | TEcharval e ->
+    compile_expr env e
+  | TEaccess (TAident i) ->
+    let _, ofs = Smap.find (fst i) env.vars in
+    movq (ind ~ofs rbp) (reg rdi) ++
+    pushq (reg rdi)
   | _ ->
     assert false
 
 (* Compile a statement *)
-let rec compile_stmt env next = function
+and compile_stmt env = function
   | TScall (i, tel) ->
     List.fold_left (fun ans x -> ans ++ compile_expr env x) nop tel ++
     call (label_of_identifier i) ++
@@ -91,11 +147,15 @@ let rec compile_stmt env next = function
   | TSreturn (Some e) ->
     compile_expr env e ++
     popq rax ++
+    popn (-env.ofs) ++
+    popq rbp ++
     ret
   | TSreturn None ->
+    popn (-env.ofs) ++
+    popq rbp ++
     ret
   | TSblock sl ->
-    compile_stmts env next sl
+    compile_stmts env sl
   | TSif (e, s1, s2) ->
     let label_second = new_label () in
     let label_end = new_label () in
@@ -103,49 +163,64 @@ let rec compile_stmt env next = function
     popq rax ++
     cmpq (imm 0) (reg rax) ++
     jz label_second ++
-    compile_stmts env next s1 ++
+    compile_stmts env s1 ++
     jz label_end ++
     label label_second ++
-    compile_stmts env next s2 ++
+    compile_stmts env s2 ++
     label label_end 
   | TSfor (i, rev, estart, eend, sl) ->
-    (* todo: Need to change rsp first *)
-    let next = next + 8 in
-    let env = { env with vars = Smap.add i (env.level, -next) env.vars } in
+    let ofs = env.ofs in
+    let env = {env with vars = Smap.add i (env.lvl, ofs - 8) env.vars; ofs = ofs - 8} in
     let label_start = new_label () in
     let label_end = new_label () in
-    compile_stmt env next (TSaccess (TAident (i, env.level), if rev then eend else estart)) ++
-    compile_expr env (if rev then estart else eend) ++
+    compile_stmt env (TSaccess (TAident (i, env.lvl), if rev then eend else estart)) ++
     label label_start ++
-    compile_expr env (TEaccess (TAident (i, env.level)), Tint) ++
-    popq rax ++
+    compile_expr env (TEaccess (TAident (i, env.lvl)), Tint) ++
+    compile_expr env (if rev then estart else eend) ++
     popq rcx ++
-    testq (reg rax) (reg rcx) ++
-    pushq (reg rcx) ++
+    popq rax ++
+    cmpq (reg rcx) (reg rax) ++
     (if rev then jl else jg) label_end ++
-    compile_stmts env next sl ++
-    (* todo: inc/dec *)
+    compile_stmts env sl ++
+    movq (ind ~ofs:(ofs - 8) rbp) (reg rdi) ++
+    (if rev then decq else incq) (reg rdi) ++
+    movq (reg rdi) (ind ~ofs:(ofs - 8) rbp) ++
+    jmp label_start ++
     label label_end
+  | TSaccess (TAident i, e) ->
+    let _, ofs = Smap.find (fst i) env.vars in
+    compile_expr env e ++
+    popq rdi ++
+    movq (reg rdi) (ind ~ofs rbp)
   | _ ->
     assert false
 
 (* Compile a list of statements *)
-and compile_stmts env next l =
-  List.fold_left ( ++ ) nop (List.map (compile_stmt env next) l)
+and compile_stmts env l =
+  List.fold_left ( ++ ) nop (List.map (compile_stmt env) l)
 
 (* Compile a whole program *)
 let compile_prog tast =
+  (* bug with return int ? *)
+  let code_inside, code_after, _ = compile_decls
+    empty_env [TDfunction (tast.main_name, [], Tunit, 
+    tast.glob_decl, tast.stmts (*@ [TSreturn (Some (TEint 0, Tint))]*))]in
   {
     text =
       (* Main function *)
       glabel "main" ++
-      label tast.main_name ++
+      code_inside ++
+      code_after ++
+      (*
+      label (label_of_identifier (tast.main_name, 0)) ++
       pushq (reg rbp) ++
       movq (reg rsp) (reg rbp) ++
-      compile_stmts empty_env 0 tast.stmts ++ 
+      code_inside ++
+      compile_stmts empty_env tast.stmts ++ 
       popq rbp ++
       movq (imm 0) (reg rax) ++
       ret ++
+      *)
       (* New_line function *)
       label "_0new_line" ++
       movq (ilab ".new_line_c") (reg rdi) ++
@@ -164,5 +239,5 @@ let compile_prog tast =
       label ".new_line_c" ++
       string "\n" ++
       label ".put_c" ++
-      string "%c" 
+      string "%c"  
   }
