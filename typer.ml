@@ -232,7 +232,8 @@ let rec type_fun_call env is_exp i el loc =
   List.iter (fun (((exp, typ1), eloc), (mode, typ2)) ->
     if mode = Minout then check_is_lvalue exp eloc env;
     check_types_equal typ1 typ2 eloc) lc;  
-  (fst (List.split etl), rt, level)
+
+  (List.map (fun ((x, _), (m, _)) -> (x, m = Minout)) lc, rt, level)
 
 and type_expr env (e, loc) = match e with
   | Enull   -> (TEnull, Tnull)

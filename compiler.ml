@@ -1,6 +1,7 @@
 (* /!\ main function *)
 (* TODO: in out & structure types *)
 (* access *)
+(* name of labels with depth (nathanael-pi.adb) *)
 open X86_64
 open Ast
 open Printf (* debug *)
@@ -15,8 +16,8 @@ end)
 
 (* Environment data structure *)
 type env = {
-  (* variable identifier -> (level, offset) in the current context *)
-  vars: (int * int * int) Smap.t;
+  (* variable identifier -> (level, offset, size, by_reference) in the current context *)
+  vars: (int * int * int * bool) Smap.t;
   (* Current level *)
   lvl: int;
   (* Current offset *)
@@ -53,7 +54,16 @@ let label_of_identifier (is, lvl) =
 
 let ident_of_rec_type = function
   | Trecord x -> x
+  | Taccess x -> x
   | _ -> assert false
+
+let is_access = function
+  | Taccess _ -> true
+  | _ -> false
+
+let record_of_access = function
+ | Taccess x -> Trecord x
+ | x -> x 
 
 (* Return a fresh identifier for a new label *)
 let new_label =
@@ -69,7 +79,8 @@ let rec size_of_type env = function
   | Tint | Tchar | Tbool -> 8
   (* not sure about this *)
   | Trecord r -> SImap.find r env.rec_sz
-  | Tnull | Taccess _ -> Printf.printf "access not yet implemented\n"; assert false 
+  | Tnull
+  | Taccess _ -> 8
   | Tunit -> Printf.printf "WTF"; assert false
 
 (* For now: only standard types *)
@@ -86,15 +97,15 @@ let compute_size_of_decl env d = match d with
 
 (* Compute stack size needed by a declaration list *)
 let compute_stack_size_decls env dl =
-  List.fold_left compute_size_of_decl env dl
+  List.fold_left compute_size_of_decl {env with stacksz = 0} dl
 
 (* Compute stack size needed by a statement list *)
 let rec compute_stack_size_stmt s = match s with
   | TSblock sl -> compute_stack_size_stmts sl
   | TSif (_, sl1, sl2) -> max (compute_stack_size_stmts sl1)
                               (compute_stack_size_stmts sl2)
-                              (* replace 24 by 16 ? *)
-  | TSfor (_, _, _, _, sl) -> 24 + compute_stack_size_stmts sl
+  | TSfor (_, _, _, _, sl) -> 16 + compute_stack_size_stmts sl
+  | TSwhile (_, sl) -> compute_stack_size_stmts sl
   | _ -> 0
 
 and compute_stack_size_stmts sl =
@@ -103,13 +114,16 @@ and compute_stack_size_stmts sl =
 (* rsi -> address of the member *)
 let rec compile_access env (e, _) = match e with
   | TEaccess (TAident i) -> 
-    let lvl, ofs, _ = Smap.find (fst i) env.vars in
+    let lvl, ofs, _, by_ref = Smap.find (fst i) env.vars in
+    if by_ref then printf "OMG %s\n" (fst i);
     iter (fun () -> movq (ind ~ofs:16 rsi) (reg rsi)) (env.lvl - lvl) () ++
-    addq (imm ofs) (reg rsi)
+    addq (imm ofs) (reg rsi) ++
+    (if by_ref then movq (ind rsi) (reg rsi) else nop)
   | TEaccess (TArecord (((_, t) as e), i)) ->
     let ofs, _ = Smap.find i (SImap.find (ident_of_rec_type t) env.rec_ofs) in
     compile_access env e ++
-    subq (imm ofs) (reg rsi)
+    (if is_access t then movq (ind rsi) (reg rsi) else nop) ++
+    subq (imm ofs) (reg rsi) 
   | _ ->
     assert false
 
@@ -121,7 +135,7 @@ let push_data sz =
 let rec compile_decl env d = match d with
   | TDident (i, t, s) ->
     let old_ofs = env.ofs in
-    let env = { env with vars = Smap.add i (env.lvl, env.ofs, size_of_type env t) env.vars;
+    let env = { env with vars = Smap.add i (env.lvl, env.ofs, size_of_type env t, false) env.vars;
                 ofs = env.ofs - size_of_type env t } in
     begin match s with
       | Some e ->
@@ -133,7 +147,8 @@ let rec compile_decl env d = match d with
   | TDfunction (i, pl, rt, dl, sl) ->
     let env = { env with vars = fst (List.fold_right
       (* something with mode here *)
-      (fun (i, _, t) (vars, ofs) -> let sz = size_of_type env t in let new_ofs = ofs + sz in Smap.add i (env.lvl + 1, new_ofs, sz) vars, new_ofs)
+      (fun (i, m, t) (vars, ofs) -> let sz = if m = Minout then 8 else size_of_type env t in let new_ofs = ofs + sz in
+      Smap.add i (env.lvl + 1, new_ofs, size_of_type env t, m = Minout) vars, new_ofs)
       pl (env.vars, 16)) } in
     let env' = compute_stack_size_decls {env with lvl = env.lvl + 1} dl in
     let env' = {env' with stacksz = env'.stacksz + compute_stack_size_stmts sl} in
@@ -149,10 +164,7 @@ let rec compile_decl env d = match d with
     popn env'.stacksz ++
     popq rbp ++
     ret ++ code_after, env
-  | TDrecordtype (i, fl) ->
-    nop, nop, env
-  | _ ->
-    assert false
+  | _ -> nop, nop, env
     
 and compile_decls env dl =
   List.fold_left (fun (code1, code2, env) d ->
@@ -171,8 +183,9 @@ and compile_expr env (e, _) = match e with
   | TEnull ->
     pushq (imm 0)
   | TEnew i ->
-    (* todo *)
-    assert false
+    movq (imm (size_of_type env (Trecord i))) (reg rdi) ++
+    call "malloc" ++
+    pushq (reg rax)
   | TEbinop (e1, o, e2) ->
     begin match o with
       | Bandthen ->
@@ -195,7 +208,6 @@ and compile_expr env (e, _) = match e with
         label label_end
       | Beq | Bneq ->
         let sz = size_of_type env (snd e1) in
-        printf "pop %d 8 and %d\n" (sz/8) sz;
         compile_expr env e1 ++
         compile_expr env e2 ++
         movq (reg rsp) (reg rsi) ++
@@ -260,28 +272,39 @@ and compile_expr env (e, _) = match e with
     compile_expr env e
   | TEaccess (TAident i) ->
     (* todo check ofs >= 0 *)
-    let lvl, ofs, sz = Smap.find (fst i) env.vars in
+    let lvl, ofs, sz, by_ref = Smap.find (fst i) env.vars in
+    if by_ref then printf "%s FDJSFJHS %d\n" (fst i) sz;
     movq (reg rbp) (reg rsi) ++
     iter (fun () -> movq (ind ~ofs:16 rsi) (reg rsi)) (env.lvl - lvl) () ++
     addq (imm ofs) (reg rsi) ++
+    (if by_ref then movq (ind rsi) (reg rsi) else nop) ++
     push_data sz
   | TEaccess (TArecord ((_, t) as e, i)) ->
-    let sz = size_of_type env t in
+    let sz = size_of_type env (record_of_access t) in
     let ofs, memsz = Smap.find i (SImap.find (ident_of_rec_type t) env.rec_ofs) in
     assert (ofs >= 0);
     compile_expr env e ++
+    (if is_access t then
+      popq rdi ++
+      iter (fun () -> pushq (ind rdi) ++ subq (imm 8) (reg rdi)) (sz / 8) ()
+     else nop) ++
     movq (reg rsp) (reg rsi) ++
     addq (imm (sz - ofs - 8)) (reg rsi)  ++
     movq (reg rsp) (reg rdi) ++
     addq (imm (sz - 8)) (reg rdi) ++
     (* calling conventions? *)
+    (* todo sure not bugged??? *)
     iter (fun () -> movq (ind rsi) (reg rcx) ++ movq (reg rcx) (ind rdi) ++ subq (imm 8) (reg rsi) ++ subq (imm 8) (reg rdi)) (memsz / 8) () ++
     popn (sz - memsz)
-    (* todo *)
+    (* todo inout *)
   | TEcall ((_, lvl) as i, tel) ->
     assert (lvl <= env.lvl);
-    let listsz = List.fold_left ( + ) 8 (List.map (size_of_type env) (snd (List.split tel))) in
-    List.fold_left (fun ans x -> ans ++ compile_expr env x) nop tel ++
+    let listsz = List.fold_left ( + ) 8 (List.map (fun ((_, t), by_ref) -> if by_ref then 8 else size_of_type env t) tel) in
+    List.fold_left
+      (fun ans (e, by_ref) ->
+        ans ++
+        (if by_ref then let () = printf "%s by ref\n" (fst i) in movq (reg rbp) (reg rsi) ++ compile_access env e ++ pushq (reg rsi) else compile_expr env e))
+      nop tel ++
     movq (reg rbp) (reg rdi) ++
     iter (fun () -> movq (ind ~ofs:16 rdi) (reg rdi)) (env.lvl - lvl) () ++
     pushq (reg rdi) ++
@@ -291,11 +314,16 @@ and compile_expr env (e, _) = match e with
 
 (* Compile a statement *)
 and compile_stmt env = function
+  (* todo inout *)
   | TScall ((_, lvl) as i, tel) ->
     (* todo adapt to var size *)
     assert (lvl <= env.lvl);
-    let listsz = List.fold_left ( + ) 8 (List.map (size_of_type env) (snd (List.split tel))) in
-    List.fold_left (fun ans x -> ans ++ compile_expr env x) nop tel ++
+    let listsz = List.fold_left ( + ) 8 (List.map (fun ((_, t), by_ref) -> if by_ref then 8 else size_of_type env t) tel) in
+    List.fold_left
+      (fun ans (e, by_ref) ->
+        ans ++
+        (if by_ref then let () = printf "%s byref\n" (fst i) in movq (reg rbp) (reg rsi) ++ compile_access env e ++ pushq (reg rsi) else compile_expr env e))
+      nop tel ++
     movq (reg rbp) (reg rdi) ++
     iter (fun () -> movq (ind ~ofs:16 rdi) (reg rdi)) (env.lvl - lvl) () ++
     pushq (reg rdi) ++
@@ -339,41 +367,41 @@ and compile_stmt env = function
     label label_end
   | TSfor (i, rev, estart, eend, sl) ->
     let ofs = env.ofs in
-    let env = {env with vars = Smap.add i (env.lvl, ofs - 8, 8) env.vars; ofs = ofs - 16} in
+    let env = {env with vars = Smap.add i (env.lvl, ofs, 8, false) env.vars; ofs = ofs - 16} in
     let label_start = new_label () in
     let label_end = new_label () in
     compile_stmt env (TSaccess (TAident (i, env.lvl), if rev then eend else estart)) ++
     compile_expr env (if rev then estart else eend) ++
     popq rdi ++
-    movq (reg rdi) (ind ~ofs:(ofs - 16) rbp) ++
+    movq (reg rdi) (ind ~ofs:(ofs - 8) rbp) ++
     label label_start ++
     compile_expr env (TEaccess (TAident (i, env.lvl)), Tint) ++
-    pushq (ind ~ofs:(ofs - 16) rbp) ++
-    popq rcx ++
     popq rax ++
+    movq (ind ~ofs:(ofs - 8) rbp) (reg rcx) ++
     cmpq (reg rcx) (reg rax) ++
     (if rev then jl else jg) label_end ++
     compile_stmts env sl ++
-    movq (ind ~ofs:(ofs - 8) rbp) (reg rdi) ++
+    movq (ind ~ofs rbp) (reg rdi) ++
     (if rev then decq else incq) (reg rdi) ++
-    movq (reg rdi) (ind ~ofs:(ofs - 8) rbp) ++
+    movq (reg rdi) (ind ~ofs rbp) ++
     jmp label_start ++
     label label_end
   | TSaccess (TAident i, e) ->
-    let _, _, sz = Smap.find (fst i) env.vars in
+    let _, _, sz, by_ref = Smap.find (fst i) env.vars in
+    printf "size of %s is %d\n" (fst i) sz;
     compile_expr env e ++
     movq (reg rbp) (reg rsi) ++
     compile_access env (TEaccess (TAident i), Tunit) ++
     subq (imm (sz - 8)) (reg rsi) ++
     iter (fun () -> popq rdi ++ movq (reg rdi) (ind rsi) ++ addq (imm 8) (reg rsi)) (sz / 8) ()
   | TSaccess (TArecord ((_, lt) as el, i), er) ->
-    (*let idt = begin match lt with Trecord x -> x | _ -> assert false end in*)
-    (*let mem_ofs = Smap.find i (SImap.find idt env.rec_ofs) in*)
-    (*let rec_sz = SImap.find idt env.rec_sz in*)
     let ofs, memsz = Smap.find i (SImap.find (ident_of_rec_type lt) env.rec_ofs) in
     compile_expr env er ++
     movq (reg rbp) (reg rsi) ++
     compile_access env el ++
+    (if is_access lt then
+      movq (ind rsi) (reg rsi)
+     else nop) ++
     subq (imm (ofs + memsz)) (reg rsi) ++
     iter (fun () -> addq (imm 8) (reg rsi) ++ popq rdi ++ movq (reg rdi) (ind rsi)) (memsz / 8) ()
 

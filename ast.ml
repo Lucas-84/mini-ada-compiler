@@ -81,6 +81,7 @@ and expr =
   | Enull
   | Eaccess of access_loc
   | Ebinop of expr_loc * binop * expr_loc
+  (* unops ? *)
   | Eneg of expr_loc
   | Eminus of expr_loc
   | Enew of ident_loc
@@ -118,7 +119,7 @@ and tparam = ident * mode * typ
 
 and tstmt =
   | TSaccess of taccess * texpr
-  | TScall of tident * texpr list
+  | TScall of tident * (texpr * bool) list
   | TSreturn of texpr option
   | TSblock of tstmt list
   | TSif of texpr * tstmt list * tstmt list
@@ -140,5 +141,5 @@ and texpr_desc =
   | TEneg of texpr
   | TEminus of texpr
   | TEnew of tident
-  | TEcall of tident * texpr list
+  | TEcall of tident * (texpr * bool) list
   | TEcharval of texpr
