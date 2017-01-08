@@ -1,7 +1,4 @@
 (* /!\ main function *)
-(* TODO: in out & structure types *)
-(* access *)
-(* name of labels with depth (nathanael-pi.adb) *)
 open X86_64
 open Ast
 open Printf (* debug *)
@@ -32,6 +29,16 @@ type env = {
   (* Stack size in curent context *)
   stacksz: int;
 }
+
+let fct_labels = ref SImap.empty
+let nb_labels = ref 0
+
+let add_label i =
+  fct_labels := SImap.add i !nb_labels !fct_labels;
+  incr nb_labels
+
+let get_label i =
+  "_f_" ^ (string_of_int (SImap.find i !fct_labels))
 
 (* Return a new empty environment *)
 let empty_env =
@@ -77,17 +84,18 @@ let popn n = addq (imm n) (reg rsp)
 let rec size_of_type env = function
   (* fuck alignment *)
   | Tint | Tchar | Tbool -> 8
-  (* not sure about this *)
   | Trecord r -> SImap.find r env.rec_sz
   | Tnull
   | Taccess _ -> 8
-  | Tunit -> Printf.printf "WTF"; assert false
+  | Tunit -> assert false
 
 (* For now: only standard types *)
 let compute_size_of_decl env d = match d with
   | TDrecordtype (i, fl) ->
     let sz = List.fold_left ( + ) 0 (List.map (size_of_type env) (snd (List.split fl))) in
-    let s = fst (List.fold_left (fun (ans, ofs) (fi, ft) -> Smap.add fi (ofs, size_of_type env ft) ans, ofs + size_of_type env ft) (Smap.empty, 0) fl) in
+    let s = fst (List.fold_left (fun (ans, ofs) (fi, ft) ->
+      Smap.add fi (ofs, size_of_type env ft) ans, ofs + size_of_type env ft)
+                  (Smap.empty, 0) fl) in
     { env with rec_sz = SImap.add (i, env.lvl) sz env.rec_sz;
                rec_ofs = SImap.add (i, env.lvl) s env.rec_ofs }
   | TDident (_, t, _) ->
@@ -115,7 +123,6 @@ and compute_stack_size_stmts sl =
 let rec compile_access env (e, _) = match e with
   | TEaccess (TAident i) -> 
     let lvl, ofs, _, by_ref = Smap.find (fst i) env.vars in
-    if by_ref then printf "OMG %s\n" (fst i);
     iter (fun () -> movq (ind ~ofs:16 rsi) (reg rsi)) (env.lvl - lvl) () ++
     addq (imm ofs) (reg rsi) ++
     (if by_ref then movq (ind rsi) (reg rsi) else nop)
@@ -129,7 +136,9 @@ let rec compile_access env (e, _) = match e with
 
 (* push data sz bytes from the address pointed by rsi to the top of the stack *)
 let push_data sz =
-  iter (fun () -> movq (ind rsi) (reg rdi) ++ pushq (reg rdi) ++ subq (imm 8) (reg rsi)) (sz / 8) ()
+  iter (fun () -> movq (ind rsi) (reg rdi) ++
+                  pushq (reg rdi) ++
+                  subq (imm 8) (reg rsi)) (sz / 8) ()
 
 (* Compile a declaration *)
 let rec compile_decl env d = match d with
@@ -146,15 +155,17 @@ let rec compile_decl env d = match d with
     end, nop, env
   | TDfunction (i, pl, rt, dl, sl) ->
     let env = { env with vars = fst (List.fold_right
-      (* something with mode here *)
       (fun (i, m, t) (vars, ofs) -> let sz = if m = Minout then 8 else size_of_type env t in let new_ofs = ofs + sz in
       Smap.add i (env.lvl + 1, new_ofs, size_of_type env t, m = Minout) vars, new_ofs)
       pl (env.vars, 16)) } in
+    add_label (i, env.lvl);
+    let l = get_label (i, env.lvl) in
     let env' = compute_stack_size_decls {env with lvl = env.lvl + 1} dl in
     let env' = {env' with stacksz = env'.stacksz + compute_stack_size_stmts sl} in
     let code_inside, code_after, env' =
-      compile_decls { env' with ofs = -8; tot_ofs = env'.stacksz} dl in
-    nop, label (label_of_identifier (i, env.lvl)) ++ 
+      compile_decls { env' with ofs = -8; tot_ofs = env'.stacksz } dl in
+    nop, 
+    label l ++ 
     pushq (reg rbp) ++
     movq (reg rsp) (reg rbp) ++
     pushn env'.stacksz ++
@@ -183,8 +194,12 @@ and compile_expr env (e, _) = match e with
   | TEnull ->
     pushq (imm 0)
   | TEnew i ->
-    movq (imm (size_of_type env (Trecord i))) (reg rdi) ++
+    let sz = size_of_type env (Trecord i) in
+    movq (imm sz) (reg rdi) ++
     call "malloc" ++
+    (* initialize to 0 *)
+    movq (reg rax) (reg rdi) ++
+    iter (fun () -> movq (imm 0) (ind rdi) ++ subq (imm 8) (reg rdi)) (sz / 8) () ++
     pushq (reg rax)
   | TEbinop (e1, o, e2) ->
     begin match o with
@@ -229,8 +244,6 @@ and compile_expr env (e, _) = match e with
         popq rcx ++
         popq rax ++
         begin match o with
-          (*| Beq  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ sete (reg al)
-          | Bneq -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setne (reg al) *)
           | Blt  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setl (reg al)
           | Ble  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setle (reg al)
           | Bgt  -> cmpq (reg rcx) (reg rax) ++ movq (imm 0) (reg rax) ++ setg (reg al)
@@ -271,9 +284,7 @@ and compile_expr env (e, _) = match e with
   | TEcharval e ->
     compile_expr env e
   | TEaccess (TAident i) ->
-    (* todo check ofs >= 0 *)
     let lvl, ofs, sz, by_ref = Smap.find (fst i) env.vars in
-    if by_ref then printf "%s FDJSFJHS %d\n" (fst i) sz;
     movq (reg rbp) (reg rsi) ++
     iter (fun () -> movq (ind ~ofs:16 rsi) (reg rsi)) (env.lvl - lvl) () ++
     addq (imm ofs) (reg rsi) ++
@@ -292,42 +303,37 @@ and compile_expr env (e, _) = match e with
     addq (imm (sz - ofs - 8)) (reg rsi)  ++
     movq (reg rsp) (reg rdi) ++
     addq (imm (sz - 8)) (reg rdi) ++
-    (* calling conventions? *)
-    (* todo sure not bugged??? *)
     iter (fun () -> movq (ind rsi) (reg rcx) ++ movq (reg rcx) (ind rdi) ++ subq (imm 8) (reg rsi) ++ subq (imm 8) (reg rdi)) (memsz / 8) () ++
     popn (sz - memsz)
-    (* todo inout *)
   | TEcall ((_, lvl) as i, tel) ->
     assert (lvl <= env.lvl);
     let listsz = List.fold_left ( + ) 8 (List.map (fun ((_, t), by_ref) -> if by_ref then 8 else size_of_type env t) tel) in
     List.fold_left
       (fun ans (e, by_ref) ->
         ans ++
-        (if by_ref then let () = printf "%s by ref\n" (fst i) in movq (reg rbp) (reg rsi) ++ compile_access env e ++ pushq (reg rsi) else compile_expr env e))
+        (if by_ref then movq (reg rbp) (reg rsi) ++ compile_access env e ++ pushq (reg rsi) else compile_expr env e))
       nop tel ++
     movq (reg rbp) (reg rdi) ++
     iter (fun () -> movq (ind ~ofs:16 rdi) (reg rdi)) (env.lvl - lvl) () ++
     pushq (reg rdi) ++
-    call (label_of_identifier i) ++
+    call (get_label i) ++
     popn listsz ++
     pushq (reg rax)
 
 (* Compile a statement *)
 and compile_stmt env = function
-  (* todo inout *)
   | TScall ((_, lvl) as i, tel) ->
-    (* todo adapt to var size *)
     assert (lvl <= env.lvl);
     let listsz = List.fold_left ( + ) 8 (List.map (fun ((_, t), by_ref) -> if by_ref then 8 else size_of_type env t) tel) in
     List.fold_left
       (fun ans (e, by_ref) ->
         ans ++
-        (if by_ref then let () = printf "%s byref\n" (fst i) in movq (reg rbp) (reg rsi) ++ compile_access env e ++ pushq (reg rsi) else compile_expr env e))
+        (if by_ref then movq (reg rbp) (reg rsi) ++ compile_access env e ++ pushq (reg rsi) else compile_expr env e))
       nop tel ++
     movq (reg rbp) (reg rdi) ++
     iter (fun () -> movq (ind ~ofs:16 rdi) (reg rdi)) (env.lvl - lvl) () ++
     pushq (reg rdi) ++
-    call (label_of_identifier i) ++
+    call (get_label i) ++
     popn listsz 
   | TSreturn (Some e) ->
     compile_expr env e ++
@@ -388,7 +394,6 @@ and compile_stmt env = function
     label label_end
   | TSaccess (TAident i, e) ->
     let _, _, sz, by_ref = Smap.find (fst i) env.vars in
-    printf "size of %s is %d\n" (fst i) sz;
     compile_expr env e ++
     movq (reg rbp) (reg rsi) ++
     compile_access env (TEaccess (TAident i), Tunit) ++
@@ -411,8 +416,9 @@ and compile_stmts env l =
 
 (* Compile a whole program *)
 let compile_prog tast =
-  (* bug with return int ? *)
-  let code_inside, code_after, _ = compile_decls
+  add_label ("put", 0);
+  add_label ("new_line", 0);
+  let code_inside, code_after, env = compile_decls
     empty_env [TDfunction (tast.main_name, [], Tunit, 
     tast.glob_decl, tast.stmts)] in
   {
@@ -421,24 +427,14 @@ let compile_prog tast =
       glabel "main" ++
       code_inside ++
       code_after ++
-      (*
-      label (label_of_identifier (tast.main_name, 0)) ++
-      pushq (reg rbp) ++
-      movq (reg rsp) (reg rbp) ++
-      code_inside ++
-      compile_stmts empty_env tast.stmts ++ 
-      popq rbp ++
-      movq (imm 0) (reg rax) ++
-      ret ++
-      *)
       (* New_line function *)
-      label "_0new_line" ++
+      label (get_label ("new_line", 0)) ++
       movq (ilab ".new_line_c") (reg rdi) ++
       movq (imm 0) (reg rax) ++
       call "printf" ++
       ret ++
       (* Put function *)
-      label "_0put" ++
+      label (get_label ("put", 0)) ++
       movq (ind ~ofs:16 rsp) (reg rsi) ++
       movq (ilab ".put_c") (reg rdi) ++
       movq (imm 0) (reg rax) ++
