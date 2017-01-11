@@ -40,9 +40,9 @@ let dummy_loc =
 let reserved_idents = ["put"; "new_line"]
 
 let string_of_typ = function
-  | Tint           -> "int"
-  | Tchar          -> "char"
-  | Tbool          -> "bool"
+  | Tint           -> "integer"
+  | Tchar          -> "chararacter"
+  | Tbool          -> "boolean"
   | Trecord (r, _) -> r
   | Taccess (r, _) -> "access " ^ r
   | Tnull          -> "access ..."

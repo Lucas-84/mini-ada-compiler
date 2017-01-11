@@ -1,7 +1,5 @@
-(* /!\ main function *)
 open X86_64
 open Ast
-open Printf (* debug *)
 
 module Smap = Map.Make(String)
 module SImap = Map.Make(struct type t = string * int
@@ -28,6 +26,8 @@ type env = {
   (* todo : refactor with tot_ofs ? *)
   (* Stack size in curent context *)
   stacksz: int;
+  (* Offset of return value *) 
+  ret_ofs: int;
 }
 
 let fct_labels = ref SImap.empty
@@ -48,7 +48,8 @@ let empty_env =
     tot_ofs = 0;
     rec_ofs = SImap.empty;
     rec_sz = SImap.empty;
-    stacksz = 0 }
+    stacksz = 0;
+    ret_ofs = 0 }
 
 (* Iter the function f n times *)
 let rec iter f n x =
@@ -154,10 +155,11 @@ let rec compile_decl env d = match d with
       | None -> nop 
     end, nop, env
   | TDfunction (i, pl, rt, dl, sl) ->
-    let env = { env with vars = fst (List.fold_right
+    let new_vars, new_ofs = List.fold_right
       (fun (i, m, t) (vars, ofs) -> let sz = if m = Minout then 8 else size_of_type env t in let new_ofs = ofs + sz in
       Smap.add i (env.lvl + 1, new_ofs, size_of_type env t, m = Minout) vars, new_ofs)
-      pl (env.vars, 16)) } in
+      pl (env.vars, 16) in
+    let env = { env with vars = new_vars } in
     add_label (i, env.lvl);
     let l = get_label (i, env.lvl) in
     let env' = compute_stack_size_decls {env with lvl = env.lvl + 1} dl in
@@ -170,7 +172,7 @@ let rec compile_decl env d = match d with
     movq (reg rsp) (reg rbp) ++
     pushn env'.stacksz ++
     code_inside ++
-    compile_stmts env' sl ++
+    compile_stmts { env' with ret_ofs = new_ofs } sl ++
     movq (imm 0) (reg rax) ++
     popn env'.stacksz ++
     popq rbp ++
@@ -184,7 +186,8 @@ and compile_decls env dl =
     (nop, nop, env) dl
 
 (* Compile an expression *)
-and compile_expr env (e, _) = match e with
+and compile_expr env (e, et) = 
+  match e with
   | TEint x ->
     pushq (imm x)
   | TEchar c ->
@@ -308,6 +311,7 @@ and compile_expr env (e, _) = match e with
   | TEcall ((_, lvl) as i, tel) ->
     assert (lvl <= env.lvl);
     let listsz = List.fold_left ( + ) 8 (List.map (fun ((_, t), by_ref) -> if by_ref then 8 else size_of_type env t) tel) in
+    pushn (size_of_type env et) ++
     List.fold_left
       (fun ans (e, by_ref) ->
         ans ++
@@ -317,8 +321,8 @@ and compile_expr env (e, _) = match e with
     iter (fun () -> movq (ind ~ofs:16 rdi) (reg rdi)) (env.lvl - lvl) () ++
     pushq (reg rdi) ++
     call (get_label i) ++
-    popn listsz ++
-    pushq (reg rax)
+    popn listsz
+    (*pushq (reg rax)*)
 
 (* Compile a statement *)
 and compile_stmt env = function
@@ -337,7 +341,9 @@ and compile_stmt env = function
     popn listsz 
   | TSreturn (Some e) ->
     compile_expr env e ++
-    popq rax ++
+    movq (reg rbp) (reg rdi) ++
+    addq (imm env.ret_ofs) (reg rdi) ++
+    iter (fun () -> popq rsi ++ addq (imm 8) (reg rdi) ++ movq (reg rsi) (ind rdi)) (size_of_type env (snd e) / 8) () ++
     popn (env.tot_ofs) ++
     popq rbp ++
     ret
