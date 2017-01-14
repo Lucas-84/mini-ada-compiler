@@ -1,0 +1,134 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{listings}
+\usepackage[left=3cm,right=3cm,top=3cm,bottom=3cm]{geometry}
+\title{Rapport sur la deuxième partie du projet de compilation}
+\author{Lucas \textsc{Pesenti}}
+\date{}
+
+\usepackage{listings}
+\usepackage{color}
+\usepackage{array}
+
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mymauve}{rgb}{0.58,0,0.82}
+
+\lstset{ %
+  backgroundcolor=\color{white},   % choose the background color; you must add \usepackage{color} or \usepackage{xcolor}; should come as last argument
+  basicstyle=\ttfamily\footnotesize,        % the size of the fonts that are used for the code
+  breakatwhitespace=false,         % sets if automatic breaks should only happen at whitespace
+  breaklines=true,                 % sets automatic line breaking
+  captionpos=b,                    % sets the caption-position to bottom
+  commentstyle=\color{mygreen},    % comment style
+  deletekeywords={...},            % if you want to delete keywords from the given language
+  escapeinside={\%*}{*)},          % if you want to add LaTeX within your code
+  extendedchars=true,              % lets you use non-ASCII characters; for 8-bits encodings only, does not work with UTF-8
+  frame=single,	                   % adds a frame around the code
+  keepspaces=true,                 % keeps spaces in text, useful for keeping indentation of code (possibly needs columns=flexible)
+  keywordstyle=\color{blue},       % keyword style
+  language=caml,                   % the language of the code
+  morekeywords={*,...},            % if you want to add more keywords to the set
+  numbers=left,                    % where to put the line-numbers; possible values are (none, left, right)
+  numbersep=5pt,                   % how far the line-numbers are from the code
+  numberstyle=\tiny\color{mygray}, % the style that is used for the line-numbers
+  rulecolor=\color{black},         % if not set, the frame-color may be changed on line-breaks within not-black text (e.g. comments (green here))
+  showspaces=false,                % show spaces everywhere adding particular underscores; it overrides 'showstringspaces'
+  showstringspaces=false,          % underline spaces within strings only
+  showtabs=false,                  % show tabs within strings adding particular underscores
+  stepnumber=1,                    % the step between two line-numbers. If it's 1, each line will be numbered
+  stringstyle=\color{mymauve},     % string literal style
+  tabsize=2,	                   % sets default tabsize to 2 spaces
+  title=\lstname                   % show the filename of files included with \lstinputlisting; also try caption instead of title
+}
+
+\begin{document}
+
+\maketitle
+\paragraph*{}
+On ajoute à la partie précédente le fichier \texttt{compiler.ml}, réalisant la production de code. Il utilise le module fourni \texttt{x86\_64.ml}, auquel on
+a rajouté le support de l'instruction \texttt{idivl} permettant de faire des divisions sur 32 bits.
+
+\section{Modifications du typeur}
+
+\section{Types accès et références}
+
+\section{Retour des enregistrements}
+
+\paragraph*{}
+Les types enregistrements sont traités de manière analogue aux types classiques. Pour réaliser l'abstraction, on dispose d'une fonction \texttt{size\_of\_type}
+associant à chaque type sa taille en octets. Alors, toutes les opérations de copie sont réalisées, quel que soit le type sous-jacent en itérant une opération
+de copie élémentaires de 8 octets autant de fois que nécessaire. Un problème se pose cependant lorsque l'on veut retourner un enregistrement, le registre
+\texttt{\%rax} ne suffit alors plus. On adopte en conséquence la convention suivante : toute fonction retournant une valeur d'un certain type la place dans la pile,
+juste avant ses arguments. Ainsi, le modèle d'un tableau d'activation pour une fonction devient :
+
+\begin{center}
+\begin{tabular}{|c|}
+  \hline
+  Valeur de retour\\
+  \hline
+  Argument 1\\
+  \hline
+  \vdots\\
+  \hline
+  Argument $n$\\
+  \hline
+  \texttt{\%rbp} de la procédure père\\
+  \hline
+  Adresse de retour\\ 
+  \hline
+  \texttt{\%rbp} appelant\\
+  \hline
+  Variables locales\\
+  \hline
+\end{tabular}
+
+\vdots
+\end{center}
+
+Pour les procédures, on garde le même tableau d'activation, en enlevant l'espace alloué pour la valeur de retour.
+
+\section{Allocation dynamique}
+
+\paragraph*{}
+La construction \texttt{new} de Mini-Ada est compilée en appelant \texttt{malloc}, puis en initialisant la mémoire allouée à 0\footnote{Par exemple, le fichier
+test \texttt{bst.adb} nécessite une telle initialisation.}, un peu dans la même idée que la fonction \texttt{calloc} du C.
+
+%\begin{figure}
+%\caption{Compilation de \texttt{new}}
+%\label{opnew}
+\begin{lstlisting}
+let sz = size_of_type env (Trecord i) in
+movq (imm sz) (reg rdi) ++
+call "malloc" ++
+(* Initialize to 0 *)
+movq (reg rax) (reg rdi) ++
+iter (fun () -> movq (imm 0) (ind rdi) ++
+                subq (imm wordsz) (reg rdi))
+     (sz / wordsz) () ++
+pushq (reg rax)
+\end{lstlisting}
+%\end{figure}
+
+\section{Opérations sur 32 bits}
+
+\paragraph*{}
+Une attention particulière a été portée à la gestion des opérations arithmétiques. En particulier, il fallait travailler sur 32 bits, alors que les données
+sont stockées sur 64 bits. Dans cette optique, on utilise les instructions suffixées par \texttt{l}, puis, pour récupérer une valeur sur 64 bits quand on
+veut l'empiler, on utilise l'instruction \texttt{movslq} permettant de faire la conversion en étendant correctement les signes. Par exemple, l'opération
+\texttt{+} est compilée de la manière suivante : 
+
+%\begin{figure}
+%\caption{Compilation de l'opération {+}}
+%\label{opplus}
+\begin{lstlisting}
+compile_expr env e1 ++ compile_expr env e2 ++
+popq rcx ++ popq rax ++
+addl (reg ecx) (reg eax)
+movslq (reg eax) rax ++
+pushq (reg rax)
+\end{lstlisting}
+%\end{figure}
+
+\end{document}
