@@ -52,7 +52,101 @@ a rajouté le support de l'instruction \texttt{idivl} permettant de faire des di
 
 \section{Modifications du typeur}
 
+\paragraph*{}
+La première étape a consisté à modifier les passages du typeur qui ne s'adaptait pas tout à fait à ce qui était vraiment
+nécessaire à la production de code. On a veillé à faire aussi peu de changements de ce type que possible. En particulier,
+les calculs des décalages des variables locales sur le tableau d'activation sont effectués dans la dernière phase de
+compilation.
+
+\paragraph*{}
+On en a profité pour uniformiser certains comportements, comme par exemple la transformation des listes de variables associées
+à un certain type en une liste de couples. On a également corrigé quelques oublis mineurs de types dans l'arbre typé.
+
+\section{Environnement de production de code}
+
+\paragraph*{}
+On a choisi de travailler directement sur l'arbre issu du typage. Les positions des variables sur la pile sont calculées à la
+volée \footnote{En particulier, on ne crée pas d'arbre intermédiaire. La raison essentielle est que les variables en Mini-Ada étant
+déclarées au début d'une fonction, il suffit d'une passe dans les déclarations pour calculer les tailles, puis d'une passe dans
+les instructions pour générer du vrai code.}. En conséquence, il a fallu garder un certain nombre d'informations dans un
+environnement :
+
+\begin{lstlisting}
+(* Environment data structure *)
+type env = {
+  (* 
+   * variable identifier -> (level, offset, size, by_reference)
+   * in the current context.
+   * *)
+  vars: (int * int * int * bool) Smap.t;
+  (* Current level *)
+  lvl: int;
+  (* Current offset *)
+  ofs: int;
+  (* Record offsets *)
+  rec_ofs: (int * int) Smap.t SImap.t;
+  (* Record size *)
+  rec_sz: int SImap.t;
+  (* Stack size in curent context *)
+  stacksz: int;
+  (* Offset of return value *) 
+  ret_ofs: int;
+}
+\end{lstlisting}
+
+\section{Gestion des labels}
+
+\paragraph*{}
+La production du code assembleur nécessite de produire des identificateurs uniques. Pour cela, un composant permet de
+produire des labels uniques pour les fonctions et les procédures. Pour cela, on associe à chaque identificateur un
+éventuel label courant. Par les règles de portée, on sait qu'une seule fonction ou procédure portant un identificateur
+donné peut exister à un certain point du code.
+
+\begin{lstlisting}
+(* Functions labels handlers *)
+let fct_labels = ref SImap.empty
+let nb_labels = ref 0
+
+let add_label i =
+  fct_labels := SImap.add i !nb_labels !fct_labels;
+  incr nb_labels
+
+let get_label i =
+  "_f_" ^ (string_of_int (SImap.find i !fct_labels))
+\end{lstlisting}
+
+En particulier, on utilise le fait que les identificateurs de Mini-Ada ne peuvent pas commencer par un tiret bas.
+
+\paragraph*{}
+On a également besoin de labels pour des sauts lors de conditions ou de boucles, par exemple. Dans ce cas, étant
+donné qu'une utilisation immédiate suffit et qu'on n'a pas de nom canonique associé, on crée à la volée des
+identificateurs uniques.
+
+\begin{lstlisting}
+(* Return a fresh identifier for a new label *)
+let new_label =
+  let cnt = ref (-1) in
+  function () -> incr cnt; "." ^ (string_of_int !cnt)
+\end{lstlisting}
+
+\section{Taille des types}
+
+\paragraph*{}
+Pour éviter les contraintes d'alignement, on stocke la totalité des types de base sur 8 octets. Évidemment, un type
+enregistrement ne fait pas nécessairement 8 octets : sa taille égale la somme des tailles de ses membres (il n'y a pas
+besoin de bits de bourrage).
+
 \section{Types accès et références}
+
+\paragraph*{}
+Les paramètres \texttt{in out} et les types accès sont traités de manière similaires : lorsqu'une indirection est nécessaire,
+on rajoute une instruction du type \texttt{movq \%rsi, 0(\%rsi)}.
+
+\paragraph*{}
+Les accès à une variable en général sont également abstraits. En particulier, la fonction \texttt{compile\_access} permet
+de mettre dans \texttt{\%rsi} l'adresse de la valeur gauche associée à une certaine expression\footnote{Comme on suppose que
+dans la phase de typage s'est correctement déroulée, on sait que lors d'une affectation, le membre de gauche est d'une
+forme très particulière}.
 
 \section{Retour des enregistrements}
 
@@ -83,8 +177,6 @@ juste avant ses arguments. Ainsi, le modèle d'un tableau d'activation pour une 
   Variables locales\\
   \hline
 \end{tabular}
-
-\vdots
 \end{center}
 
 Pour les procédures, on garde le même tableau d'activation, en enlevant l'espace alloué pour la valeur de retour.

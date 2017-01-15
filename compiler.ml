@@ -91,7 +91,7 @@ let popn n = addq (imm n) (reg rsp)
 let rec size_of_type env = function
   (*
    * In order to make alignment requirements easier,
-   * all data type are stored on 8 bytes.
+   * all data types are stored on 8 bytes.
    *)
   | Tnull | Taccess _ | Tint | Tchar | Tbool -> wordsz 
   | Trecord r -> SImap.find r env.rec_sz

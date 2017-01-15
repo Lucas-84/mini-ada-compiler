@@ -11,7 +11,7 @@ make
 To execute:
 
 ````
-./ada file.adb
+./adac file.adb [--parse-only] [--type-only]
 ````
 
 To clean the repository:
@@ -28,4 +28,6 @@ make clean
  - `lexer.mll` : lexer (`ocamllex`).
  - `parser.mly` : parser (`menhir`).
  - `typer.ml` : typer.
- - `rapport/rapport.pdf` : PDF report.
+ - `compiler.ml` : code production.
+ - `rapport/rapport_typer.pdf` : PDF report for typer.
+ - `rapport/rapport_final.pdf` : final PDF report.
