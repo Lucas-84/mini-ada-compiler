@@ -53,14 +53,15 @@ a rajouté le support de l'instruction \texttt{idivl} permettant de faire des di
 \section{Modifications du typeur}
 
 \paragraph*{}
-La première étape a consisté à modifier les passages du typeur qui ne s'adaptait pas tout à fait à ce qui était vraiment
+La première étape a consisté à modifier les passages du typeur qui ne s'adaptaient pas tout à fait à ce qui était vraiment
 nécessaire à la production de code. On a veillé à faire aussi peu de changements de ce type que possible. En particulier,
-les calculs des décalages des variables locales sur le tableau d'activation sont effectués dans la dernière phase de
+les calculs des décalages des variables locales sur le tableau d'activation sont effectués dans la dernière phase de la
 compilation.
 
 \paragraph*{}
 On en a profité pour uniformiser certains comportements, comme par exemple la transformation des listes de variables associées
-à un certain type en une liste de couples. On a également corrigé quelques oublis mineurs de types dans l'arbre typé.
+à un certain type en une liste de couples. On a également corrigé quelques oublis mineurs de types dans l'arbre de syntaxe
+abstraite typé.
 
 \section{Environnement de production de code}
 
@@ -69,7 +70,7 @@ On a choisi de travailler directement sur l'arbre issu du typage. Les positions 
 volée \footnote{En particulier, on ne crée pas d'arbre intermédiaire. La raison essentielle est que les variables en Mini-Ada étant
 déclarées au début d'une fonction, il suffit d'une passe dans les déclarations pour calculer les tailles, puis d'une passe dans
 les instructions pour générer du vrai code.}. En conséquence, il a fallu garder un certain nombre d'informations dans un
-environnement :
+nouvel environnement, analogue à celui du typage :
 
 \begin{lstlisting}
 (* Environment data structure *)
@@ -77,7 +78,7 @@ type env = {
   (* 
    * variable identifier -> (level, offset, size, by_reference)
    * in the current context.
-   * *)
+   *)
   vars: (int * int * int * bool) Smap.t;
   (* Current level *)
   lvl: int;
@@ -98,9 +99,9 @@ type env = {
 
 \paragraph*{}
 La production du code assembleur nécessite de produire des identificateurs uniques. Pour cela, un composant permet de
-produire des labels uniques pour les fonctions et les procédures. Pour cela, on associe à chaque identificateur un
-éventuel label courant. Par les règles de portée, on sait qu'une seule fonction ou procédure portant un identificateur
-donné peut exister à un certain point du code.
+produire des labels uniques pour les fonctions et les procédures. Dans cette optique, on associe à chaque identificateur un
+éventuel label courant. En vertu des règles de portée, on sait qu'une seule fonction ou procédure portant un identificateur
+donné peut être accessible à un certain point du code.
 
 \begin{lstlisting}
 (* Functions labels handlers *)
@@ -143,17 +144,20 @@ Les paramètres \texttt{in out} et les types accès sont traités de manière si
 on rajoute une instruction du type \texttt{movq \%rsi, 0(\%rsi)}.
 
 \paragraph*{}
-Les accès à une variable en général sont également abstraits. En particulier, la fonction \texttt{compile\_access} permet
+Les accès à une variable en général sont traités grâce à la fonction \texttt{compile\_access}, qui permet
 de mettre dans \texttt{\%rsi} l'adresse de la valeur gauche associée à une certaine expression\footnote{Comme on suppose que
-dans la phase de typage s'est correctement déroulée, on sait que lors d'une affectation, le membre de gauche est d'une
-forme très particulière}.
+la phase de typage s'est correctement déroulée, on sait que lors d'une affectation, le membre de gauche est d'une
+forme très particulière.}.
 
 \section{Retour des enregistrements}
 
 \paragraph*{}
 Les types enregistrements sont traités de manière analogue aux types classiques. Pour réaliser l'abstraction, on dispose d'une fonction \texttt{size\_of\_type}
-associant à chaque type sa taille en octets. Alors, toutes les opérations de copie sont réalisées, quel que soit le type sous-jacent en itérant une opération
-de copie élémentaires de 8 octets autant de fois que nécessaire. Un problème se pose cependant lorsque l'on veut retourner un enregistrement, le registre
+associant à chaque type sa taille en octets. Ansi, toutes les opérations de copie sont réalisées, quel que soit le type sous-jacent, en itérant une opération
+de copie élémentaire de 8 octets autant de fois que nécessaire.
+
+\paragraph*{}
+Un problème se pose cependant lorsque l'on veut retourner une variable de type enregistrement ; le registre
 \texttt{\%rax} ne suffit alors plus. On adopte en conséquence la convention suivante : toute fonction retournant une valeur d'un certain type la place dans la pile,
 juste avant ses arguments. Ainsi, le modèle d'un tableau d'activation pour une fonction devient :
 
@@ -185,7 +189,7 @@ Pour les procédures, on garde le même tableau d'activation, en enlevant l'espa
 
 \paragraph*{}
 La construction \texttt{new} de Mini-Ada est compilée en appelant \texttt{malloc}, puis en initialisant la mémoire allouée à 0\footnote{Par exemple, le fichier
-test \texttt{bst.adb} nécessite une telle initialisation.}, un peu dans la même idée que la fonction \texttt{calloc} du C.
+test \texttt{bst.adb} nécessite une telle initialisation.}, un peu dans le même esprit que la fonction \texttt{calloc} du C.
 
 %\begin{figure}
 %\caption{Compilation de \texttt{new}}
